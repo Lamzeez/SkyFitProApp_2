@@ -43,53 +43,63 @@ class WeatherViewModel extends ChangeNotifier {
 
     if (temp > 35) {
       // Extreme Heat
-      if (user.weight > 80) { // Assuming 80kg+ as overweight placeholder or we could use BMI
+      if (user.weight > 80) { // Assuming 80kg+ as overweight placeholder
         activities.add(ActivityModel(
           title: "Swimming",
           description: "Keep cool and stay hydrated while swimming.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
         ));
         activities.add(ActivityModel(
           title: "Hydrated Light Stretching",
           description: "Gentle movement in a cool environment.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
         ));
       } else {
         activities.add(ActivityModel(
           title: "Indoor Light Cardio",
           description: "Avoid the heat with some indoor movement.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
         ));
       }
-    } else if (condition.contains("rain") || condition.contains("snow") || condition.contains("storm")) {
+      } else if (condition.contains("rain") || condition.contains("snow") || condition.contains("storm")) {
       // Rain/Snow
       activities.add(ActivityModel(
         title: "Indoor Yoga",
         description: "Perfect for a cozy rainy day indoors.",
+        mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
       ));
       activities.add(ActivityModel(
         title: "Bodyweight Circuit",
         description: "Get your heart rate up without leaving home.",
+        mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
       ));
-    } else if (condition.contains("clear") || condition.contains("cloud")) {
+      } else if (condition.contains("clear") || condition.contains("cloud")) {
       // Clear/Sunny/Cloudy
       if (user.age < 50) {
         activities.add(ActivityModel(
           title: "Outdoor Running",
           description: "Great weather for a jog in the park!",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
         ));
         activities.add(ActivityModel(
           title: "High-Intensity Interval Training",
           description: "Push your limits with an outdoor HIIT session.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
         ));
       } else {
         activities.add(ActivityModel(
           title: "Morning Walk",
           description: "Enjoy the fresh air with a brisk walk.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
         ));
         activities.add(ActivityModel(
           title: "Tai Chi in the Park",
           description: "Focus on balance and breathing in nature.",
+          mediaUrl: "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
         ));
       }
-    } else {
+      }
+ else {
       // Default
       activities.add(ActivityModel(
         title: "Daily Stretching",

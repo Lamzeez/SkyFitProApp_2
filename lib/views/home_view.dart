@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/weather_viewmodel.dart';
 import 'profile_view.dart';
+import 'widgets/activity_video_player.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -74,11 +75,19 @@ class _HomeViewState extends State<HomeView> {
                   itemBuilder: (context, index) {
                     final activity = weatherViewModel.suggestedActivities[index];
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: const Icon(Icons.fitness_center, color: Colors.lightBlue),
-                        title: Text(activity.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(activity.description),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (activity.mediaUrl != null)
+                            ActivityVideoPlayer(videoUrl: activity.mediaUrl!),
+                          ListTile(
+                            leading: const Icon(Icons.fitness_center, color: Colors.lightBlue),
+                            title: Text(activity.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(activity.description),
+                          ),
+                        ],
                       ),
                     );
                   },

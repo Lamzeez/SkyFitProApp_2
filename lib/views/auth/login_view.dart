@@ -20,9 +20,10 @@ class _LoginViewState extends State<LoginView> {
   @override
   Widget build(BuildContext context) {
     final authViewModel = context.watch<AuthViewModel>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.lightBlue[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -81,11 +82,15 @@ class _LoginViewState extends State<LoginView> {
                       );
                     }
                   },
-                  icon: const Icon(Icons.g_mobiledata, size: 30),
-                  label: const Text("Sign in with Google"),
+                  icon: const Icon(Icons.g_mobiledata, size: 30, color: Colors.lightBlue),
+                  label: Text(
+                    "Sign in with Google",
+                    style: TextStyle(color: isDark ? Colors.lightBlue[100] : Colors.lightBlue[800]),
+                  ),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                     side: const BorderSide(color: Colors.lightBlue),
+                    backgroundColor: isDark ? Colors.blueGrey[900] : Colors.white,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -96,7 +101,10 @@ class _LoginViewState extends State<LoginView> {
                       MaterialPageRoute(builder: (context) => const RegisterView()),
                     );
                   },
-                  child: const Text("Don't have an account? Register"),
+                  child: Text(
+                    "Don't have an account? Register",
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                  ),
                 ),
                 if (authViewModel.error != null)
                   Padding(

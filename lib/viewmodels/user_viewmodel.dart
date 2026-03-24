@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/firestore_service.dart';
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
+
 class UserViewModel extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
 
@@ -18,7 +23,7 @@ class UserViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> updateProfile({String? fullName, int? age, double? weight}) async {
+  Future<bool> updateProfile({String? fullName, int? age, double? weight, String? profilePictureUrl}) async {
     if (_user == null) return false;
 
     _isLoading = true;
@@ -30,6 +35,7 @@ class UserViewModel extends ChangeNotifier {
         fullName: fullName,
         age: age,
         weight: weight,
+        profilePictureUrl: profilePictureUrl,
       );
       await _firestoreService.updateUser(updatedUser);
       _user = updatedUser;
@@ -41,6 +47,42 @@ class UserViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<String?> uploadProfilePicture(Uint8List fileData) async {
+    if (_user == null) return null;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Decode the image for processing
+      img.Image? decodedImage = img.decodeImage(fileData);
+      if (decodedImage == null) throw Exception("Failed to decode image");
+
+      // Resize if necessary (Max 500x500)
+      if (decodedImage.width > 500 || decodedImage.height > 500) {
+        decodedImage = img.copyResize(decodedImage, width: 500, height: 500);
+      }
+
+      // Encode as JPG with 75% quality (Very small file size, good quality)
+      final compressedData = img.encodeJpg(decodedImage, quality: 75);
+      
+      // Convert image to Base64 data URL
+      final base64String = base64Encode(compressedData);
+      final dataUrl = "data:image/jpeg;base64,$base64String";
+      
+      await updateProfile(profilePictureUrl: dataUrl);
+      
+      _isLoading = false;
+      notifyListeners();
+      return dataUrl;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
     }
   }
 }

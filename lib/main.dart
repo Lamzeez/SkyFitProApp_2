@@ -7,6 +7,7 @@ import 'viewmodels/user_viewmodel.dart';
 import 'viewmodels/weather_viewmodel.dart';
 import 'services/session_manager.dart';
 import 'views/auth/login_view.dart';
+import 'views/auth/biometric_lock_view.dart';
 import 'views/home_view.dart';
 import 'utils/env_config.dart';
 
@@ -92,6 +93,9 @@ class _SkyFitProAppState extends State<SkyFitProApp> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (authViewModel.user != null) {
+      if (!authViewModel.isBiometricAuthenticated) {
+        return const BiometricLockView();
+      }
       _sessionManager.startTimer();
       return const HomeView();
     }
