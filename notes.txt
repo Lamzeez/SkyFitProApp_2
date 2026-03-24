@@ -1,0 +1,101 @@
+Laboratory Exercise: "SkyFit Pro" -  Flutter WebApp Secure Identity & Health System
+
+Topic: Mobile Secure Deployment (MVVM), Docker, GCP Cloud Run, Biometrics & SSO (T7/T8)
+
+1. Objective
+By the end of this activity, the group will be able to:
+- Develop a Secure User Identity System with Custom Registration & Google SSO.
+- Implement Biometric Authentication (Fingerprint/FaceID) to secure sensitive user data.
+- Integrate Personalized Health Logic based on user profile (Age/Weight) + Weather.
+- Containerize the application using Docker and deploy securely to GCP Cloud Run.
+- Maintain strict MVVM Architecture with a Repository Pattern
+
+2. Team Roles & Responsibilities (Let's skip this part)
+
+3. Strict MVVM Project Structure
+Constraint: The Team Lead (M1) must initialize the project. You are strictly required to follow this folder structure.
+Plaintext
+lib/
+├── main.dart                   # Entry point (Auth Guard & Routes)
+├── models/                     # Data Layer
+│   ├── user_model.dart         # Profile: Name, Age, Weight, Bio-Auth Status
+│   ├── weather_model.dart      # Weather data
+│   └── activity_model.dart     # Health activity logic
+├── views/                      # UI Layer
+│   ├── auth/                   # Authentication Screens
+│   │   ├── login_view.dart     # Email/Pass & Google Sign-In
+│   │   └── register_view.dart  # Custom Registration
+│   ├── home_view.dart          # Main Dashboard (Weather + Activities)
+│   ├── profile_view.dart       # Edit Profile & Biometric Toggle
+│   └── widgets/                # Reusable Widgets
+├── viewmodels/                 # Logic Layer
+│   ├── auth_viewmodel.dart     # Login, Register, Google Auth, Biometrics
+│   ├── user_viewmodel.dart     # Profile Management
+│   └── weather_viewmodel.dart  # Weather & Activity Logic
+├── repositories/               # Data Decision Layer
+│   ├── auth_repository.dart    # Firebase Auth & Google Sign-In logic
+│   └── weather_repository.dart # API vs Cache logic
+├── services/                   # External Services
+│   ├── api_service.dart        # OpenWeatherMap
+│   ├── local_auth_service.dart # Biometrics (Fingerprint/Face)
+│   ├── storage_service.dart    # Secure Storage (Tokens/Prefs)
+│   └── firestore_service.dart  # User Profile Database
+└── utils/                      # Helpers
+    └── env_config.dart         # Secure Keys
+Dockerfile                      # Container Config
+cloudbuild.yaml                 # GCP CI/CD Config
+
+4. Technical Requirements
+A. Secure Authentication (M1 & M3)
+- Custom Registration: Users must provide Email, Password (Strong Regex), Create user profile like (Full Name, Age, Weight, Profile Picture, and other relative information all are updatable)
+- Google SSO: "Sign in with Google" button must work.
+B. Biometric Security (M2)
+- Toggle: In ProfileView, add a switch: "Enable Biometric Login".
+- Logic: If enabled, the next app launch prompts for Fingerprint/FaceID instead of password.
+- Fallback: If biometrics fail 3 times, force password entry.
+- Inactivity Timer:
+  - Create a SessionManager class.
+  - Use a Timer that resets on user interaction (tap/scroll).
+  - Logic: if (inactiveTime > 5 mins) -> Navigator.pushReplacement(LoginScreen).
+C. Personalized Health Logic (M3 & M5)
+- API: Fetch data from OpenWeatherMap (Temp, Humidity, Weather Condition).
+- Logic Engine: This is only a suggested activities based on the following matrix you can improved this by research:
+Weather		Age Group	Weight Category		Suggested Activity not limited to:
+Clear/Sunny	< 50		Normal/Athletic		"Outdoor Running / High-Intensity Interval Training"
+Clear/Sunny	> 50		Any			"Morning Walk / Tai Chi in the Park"
+Rain/Snow	Any		Any			"Indoor Yoga / Bodyweight Circuit"
+Extreme Heat	Any		Overweight		"Swimming / Hydrated Light Stretching"
+*Note: Integrated sample media on the mobile app (Sample video exercises-AI Generated)*
+
+5. Deployment Instructions (GCP & Firebase)
+Step 1: Firebase Setup
+- Create a Firebase Project and enable Authentication (Email/Password & Google) and Firestore.
+- Web Config: For Flutter Web, use dart-define to inject firebaseConfig during the Docker build.
+
+Step 2: Dockerfile (Multi-Stage)
+Dockerfile:
+# Stage 1: Build
+FROM debian:latest AS build-env
+# ... install flutter ...
+RUN flutter build web --release --dart-define=API_KEY=SECRET_KEY
+# Stage 2: Serve
+FROM nginx:alpine
+COPY --from=build-env /app/build/web /usr/share/nginx/html
+EXPOSE 8080
+
+Step 3: CI/CD (Cloud Build) Ensure cloudbuild.yaml handles the build arguments for your keys.
+6. Deliverables
+
+A. Source Code
+- GitHub Repo: Clean code, MVVM structure, .gitignore includes .env and firebase_options.dart.
+- README: Instructions for running locally and list of team members.
+B. Live Deployment
+- URL: Active GCP Cloud Run link.
+- CI/CD Proof: Screenshot of "Success" build history in Google Cloud Console.
+C. Feature Highlights
+- Registration: Creating a new account with Age/Weight and other personal information.
+- SSO: Logging in with Google.
+- Biometrics: Enabling the toggle, closing app, and unlocking with Fingerprint or FaceID (optional).
+- Personalization: Changing Age in profile -> Returning to Home -> Seeing a different activity suggestion for the same weather and toggle on/off dark mode.
+D. Documentation (PDF)
+Explanation of the Health Logic algorithm.

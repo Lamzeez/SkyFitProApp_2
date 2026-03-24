@@ -1,0 +1,40 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
+import '../utils/env_config.dart';
+
+class FirestoreService {
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
+
+  Future<void> createUser(UserModel user) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(user.uid).set(user.toMap());
+  }
+
+  Future<UserModel?> getUser(String uid) async {
+    if (!EnvConfig.isFirebaseConfigured) {
+      // Return a mock user for local testing if not configured
+      return UserModel(
+        uid: uid,
+        email: "test@example.com",
+        fullName: "Mock User",
+        age: 25,
+        weight: 70.0,
+      );
+    }
+    final doc = await _db.collection('users').doc(uid).get();
+    if (doc.exists && doc.data() != null) {
+      return UserModel.fromMap(doc.data()!, uid);
+    }
+    return null;
+  }
+
+  Future<void> updateUser(UserModel user) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(user.uid).update(user.toMap());
+  }
+
+  Future<void> updateBiometricStatus(String uid, bool isEnabled) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(uid).update({'biometricEnabled': isEnabled});
+  }
+}
