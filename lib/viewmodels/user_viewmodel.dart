@@ -23,7 +23,7 @@ class UserViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> updateProfile({String? fullName, int? age, double? weight, String? profilePictureUrl}) async {
+  Future<bool> updateProfile({String? fullName, int? age, double? weight, double? height, String? profilePictureUrl}) async {
     if (_user == null) return false;
 
     _isLoading = true;
@@ -35,6 +35,7 @@ class UserViewModel extends ChangeNotifier {
         fullName: fullName,
         age: age,
         weight: weight,
+        height: height,
         profilePictureUrl: profilePictureUrl,
       );
       await _firestoreService.updateUser(updatedUser);

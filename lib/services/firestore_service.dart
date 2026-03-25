@@ -19,6 +19,7 @@ class FirestoreService {
         fullName: "Mock User",
         age: 25,
         weight: 70.0,
+        height: 170.0,
       );
     }
     final doc = await _db.collection('users').doc(uid).get();

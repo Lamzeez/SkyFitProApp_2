@@ -34,10 +34,17 @@ class _HomeViewState extends State<HomeView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ProfileView()),
-            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileView()),
+              );
+              // When coming back, the user profile might have changed (Age/Weight)
+              if (mounted) {
+                final user = context.read<AuthViewModel>().user;
+                context.read<WeatherViewModel>().updateWeatherAndActivities("Manila", user);
+              }
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout),

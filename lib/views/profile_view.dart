@@ -20,6 +20,7 @@ class _ProfileViewState extends State<ProfileView> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
   bool _initialized = false;
   final ImagePicker _picker = ImagePicker();
 
@@ -33,6 +34,7 @@ class _ProfileViewState extends State<ProfileView> {
         _fullNameController.text = user.fullName;
         _ageController.text = user.age.toString();
         _weightController.text = user.weight.toString();
+        _heightController.text = user.height.toString();
         context.read<UserViewModel>().setUser(user);
         _initialized = true;
       }
@@ -115,12 +117,30 @@ class _ProfileViewState extends State<ProfileView> {
             ),
             const SizedBox(height: 10),
             Text(user.email, style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.lightBlue[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                "BMI: ${user.bmi.toStringAsFixed(1)} (${user.weightCategory})",
+                style: const TextStyle(color: Colors.lightBlue, fontWeight: FontWeight.bold),
+              ),
+            ),
             const SizedBox(height: 30),
             CustomTextField(controller: _fullNameController, label: "Full Name"),
             const SizedBox(height: 20),
-            CustomTextField(controller: _ageController, label: "Age", keyboardType: TextInputType.number),
-            const SizedBox(height: 20),
-            CustomTextField(controller: _weightController, label: "Weight (kg)", keyboardType: TextInputType.number),
+            Row(
+              children: [
+                Expanded(child: CustomTextField(controller: _ageController, label: "Age", keyboardType: TextInputType.number)),
+                const SizedBox(width: 15),
+                Expanded(child: CustomTextField(controller: _heightController, label: "Height (cm)", keyboardType: TextInputType.number)),
+                const SizedBox(width: 15),
+                Expanded(child: CustomTextField(controller: _weightController, label: "Weight (kg)", keyboardType: TextInputType.number)),
+              ],
+            ),
             const SizedBox(height: 30),
             CustomButton(
               text: "Update Profile",
@@ -130,6 +150,7 @@ class _ProfileViewState extends State<ProfileView> {
                   fullName: _fullNameController.text,
                   age: int.tryParse(_ageController.text) ?? 0,
                   weight: double.tryParse(_weightController.text) ?? 0.0,
+                  height: double.tryParse(_heightController.text) ?? 0.0,
                 );
                 if (success && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

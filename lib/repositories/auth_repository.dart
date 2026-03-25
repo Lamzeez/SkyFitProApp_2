@@ -14,9 +14,9 @@ class AuthRepository {
 
   Stream<User?> get authStateChanges => EnvConfig.isFirebaseConfigured ? _auth.authStateChanges() : const Stream.empty();
 
-  Future<UserModel?> register(String email, String password, String fullName, int age, double weight, {Uint8List? profileImageData}) async {
+  Future<UserModel?> register(String email, String password, String fullName, int age, double weight, double height, {Uint8List? profileImageData}) async {
     if (!EnvConfig.isFirebaseConfigured) {
-      return UserModel(uid: "mock_uid", email: email, fullName: fullName, age: age, weight: weight);
+      return UserModel(uid: "mock_uid", email: email, fullName: fullName, age: age, weight: weight, height: height);
     }
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(email: email, password: password);
@@ -47,6 +47,7 @@ class AuthRepository {
           fullName: fullName,
           age: age,
           weight: weight,
+          height: height,
           profilePictureUrl: profileUrl,
         );
         await _firestoreService.createUser(userModel);
@@ -68,6 +69,7 @@ class AuthRepository {
         fullName: "Mock User",
         age: 25,
         weight: 70.0,
+        height: 170.0,
       );
     }
     try {
@@ -84,7 +86,7 @@ class AuthRepository {
 
   Future<UserModel?> signInWithGoogle() async {
     if (!EnvConfig.isFirebaseConfigured) {
-      return UserModel(uid: "mock_google_uid", email: "google@mock.com", fullName: "Google Mock User", age: 0, weight: 0.0);
+      return UserModel(uid: "mock_google_uid", email: "google@mock.com", fullName: "Google Mock User", age: 0, weight: 0.0, height: 170.0);
     }
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -109,6 +111,7 @@ class AuthRepository {
             fullName: user.displayName ?? '',
             age: 0,
             weight: 0.0,
+            height: 170.0,
           );
           await _firestoreService.createUser(userModel);
         }

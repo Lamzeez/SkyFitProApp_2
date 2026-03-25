@@ -40,10 +40,11 @@ class WeatherViewModel extends ChangeNotifier {
     List<ActivityModel> activities = [];
     String condition = weather.condition.toLowerCase();
     double temp = weather.temperature;
+    String weightCat = user.weightCategory;
 
     if (temp > 35) {
       // Extreme Heat
-      if (user.weight > 80) { // Assuming 80kg+ as overweight placeholder
+      if (weightCat == "Overweight" || weightCat == "Obese") {
         activities.add(ActivityModel(
           title: "Swimming",
           description: "Keep cool and stay hydrated while swimming.",

@@ -19,6 +19,7 @@ class _RegisterViewState extends State<RegisterView> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   Uint8List? _selectedImage;
@@ -74,18 +75,35 @@ class _RegisterViewState extends State<RegisterView> {
                 validator: (v) => v!.isEmpty ? "Enter full name" : null,
               ),
               const SizedBox(height: 20),
-              CustomTextField(
-                controller: _ageController,
-                label: "Age",
-                keyboardType: TextInputType.number,
-                validator: (v) => v!.isEmpty ? "Enter age" : null,
-              ),
-              const SizedBox(height: 20),
-              CustomTextField(
-                controller: _weightController,
-                label: "Weight (kg)",
-                keyboardType: TextInputType.number,
-                validator: (v) => v!.isEmpty ? "Enter weight" : null,
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomTextField(
+                      controller: _ageController,
+                      label: "Age",
+                      keyboardType: TextInputType.number,
+                      validator: (v) => v!.isEmpty ? "Enter age" : null,
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: CustomTextField(
+                      controller: _heightController,
+                      label: "Height (cm)",
+                      keyboardType: TextInputType.number,
+                      validator: (v) => v!.isEmpty ? "Enter height" : null,
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: CustomTextField(
+                      controller: _weightController,
+                      label: "Weight (kg)",
+                      keyboardType: TextInputType.number,
+                      validator: (v) => v!.isEmpty ? "Enter weight" : null,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               CustomTextField(
@@ -120,6 +138,7 @@ class _RegisterViewState extends State<RegisterView> {
                       _fullNameController.text,
                       int.parse(_ageController.text),
                       double.parse(_weightController.text),
+                      double.parse(_heightController.text),
                       profileImageData: _selectedImage,
                     );
                     if (success && mounted) {

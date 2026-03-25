@@ -67,12 +67,12 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(String email, String password, String fullName, int age, double weight, {Uint8List? profileImageData}) async {
+  Future<bool> register(String email, String password, String fullName, int age, double weight, double height, {Uint8List? profileImageData}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      _user = await _authRepository.register(email, password, fullName, age, weight, profileImageData: profileImageData);
+      _user = await _authRepository.register(email, password, fullName, age, weight, height, profileImageData: profileImageData);
       if (_user != null) {
         _isBiometricAuthenticated = true;
         _biometricFailCount = 0;

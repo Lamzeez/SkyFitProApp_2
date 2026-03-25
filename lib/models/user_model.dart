@@ -4,6 +4,7 @@ class UserModel {
   final String fullName;
   final int age;
   final double weight;
+  final double height; // Height in cm
   final bool biometricEnabled;
   final String? profilePictureUrl;
 
@@ -13,9 +14,25 @@ class UserModel {
     required this.fullName,
     required this.age,
     required this.weight,
+    required this.height,
     this.biometricEnabled = false,
     this.profilePictureUrl,
   });
+
+  // Calculate BMI: weight (kg) / [height (m)]^2
+  double get bmi {
+    if (height <= 0) return 0;
+    double heightInMeters = height / 100;
+    return weight / (heightInMeters * heightInMeters);
+  }
+
+  String get weightCategory {
+    double val = bmi;
+    if (val < 18.5) return "Underweight";
+    if (val < 25) return "Normal/Athletic";
+    if (val < 30) return "Overweight";
+    return "Obese";
+  }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {
     return UserModel(
@@ -24,6 +41,7 @@ class UserModel {
       fullName: map['fullName'] ?? '',
       age: map['age'] ?? 0,
       weight: (map['weight'] as num?)?.toDouble() ?? 0.0,
+      height: (map['height'] as num?)?.toDouble() ?? 170.0, // Default 170cm
       biometricEnabled: map['biometricEnabled'] ?? false,
       profilePictureUrl: map['profilePictureUrl'],
     );
@@ -35,6 +53,7 @@ class UserModel {
       'fullName': fullName,
       'age': age,
       'weight': weight,
+      'height': height,
       'biometricEnabled': biometricEnabled,
       'profilePictureUrl': profilePictureUrl,
     };
@@ -44,6 +63,7 @@ class UserModel {
     String? fullName,
     int? age,
     double? weight,
+    double? height,
     bool? biometricEnabled,
     String? profilePictureUrl,
   }) {
@@ -53,6 +73,7 @@ class UserModel {
       fullName: fullName ?? this.fullName,
       age: age ?? this.age,
       weight: weight ?? this.weight,
+      height: height ?? this.height,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
     );
