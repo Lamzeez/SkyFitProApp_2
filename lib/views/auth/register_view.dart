@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../widgets/custom_widgets.dart';
 import '../home_view.dart';
@@ -19,6 +21,27 @@ class _RegisterViewState extends State<RegisterView> {
   final TextEditingController _weightController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  Uint8List? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        final Uint8List imageData = await image.readAsBytes();
+        setState(() {
+          _selectedImage = imageData;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error picking image: $e")),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authViewModel = context.watch<AuthViewModel>();
@@ -31,6 +54,20 @@ class _RegisterViewState extends State<RegisterView> {
           key: _formKey,
           child: Column(
             children: [
+              GestureDetector(
+                onTap: _pickImage,
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.lightBlue[100],
+                  backgroundImage: _selectedImage != null ? MemoryImage(_selectedImage!) : null,
+                  child: _selectedImage == null
+                      ? const Icon(Icons.add_a_photo, size: 50, color: Colors.lightBlue)
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text("Add Profile Picture", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 30),
               CustomTextField(
                 controller: _fullNameController,
                 label: "Full Name",
@@ -62,7 +99,14 @@ class _RegisterViewState extends State<RegisterView> {
                 controller: _passwordController,
                 label: "Password",
                 isPassword: true,
-                validator: (v) => v!.length < 6 ? "Password too short" : null,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return "Enter password";
+                  if (v.length < 8) return "Must be at least 8 characters";
+                  if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]').hasMatch(v)) {
+                    return "Need: Upper, Lower, Number, Special Char";
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 30),
               CustomButton(
@@ -76,6 +120,7 @@ class _RegisterViewState extends State<RegisterView> {
                       _fullNameController.text,
                       int.parse(_ageController.text),
                       double.parse(_weightController.text),
+                      profileImageData: _selectedImage,
                     );
                     if (success && mounted) {
                       Navigator.pushAndRemoveUntil(

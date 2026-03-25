@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import '../repositories/auth_repository.dart';
 import '../models/user_model.dart';
 import '../services/local_auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/storage_service.dart';
+import '../utils/env_config.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
   final LocalAuthService _localAuthService = LocalAuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  final StorageService _storageService = StorageService();
 
   UserModel? _user;
   bool _isLoading = false;
@@ -29,10 +33,15 @@ class AuthViewModel extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     _user = await _authRepository.getCurrentUserModel();
+    
+    // Check local storage for biometric preference
+    final bioEnabled = await _storageService.read('biometric_enabled');
+    
     // Initially, if no user or biometrics are disabled, we don't need biometric check
-    if (_user == null || !_user!.biometricEnabled) {
+    if (_user == null || bioEnabled != 'true') {
       _isBiometricAuthenticated = true;
     }
+    
     _isLoading = false;
     notifyListeners();
   }
@@ -44,7 +53,6 @@ class AuthViewModel extends ChangeNotifier {
     try {
       _user = await _authRepository.login(email, password);
       if (_user != null) {
-        // After fresh login, we are authenticated for biometrics
         _isBiometricAuthenticated = true;
         _biometricFailCount = 0;
       }
@@ -59,12 +67,12 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(String email, String password, String fullName, int age, double weight) async {
+  Future<bool> register(String email, String password, String fullName, int age, double weight, {Uint8List? profileImageData}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      _user = await _authRepository.register(email, password, fullName, age, weight);
+      _user = await _authRepository.register(email, password, fullName, age, weight, profileImageData: profileImageData);
       if (_user != null) {
         _isBiometricAuthenticated = true;
         _biometricFailCount = 0;
@@ -108,6 +116,7 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<void> logout() async {
     await _authRepository.signOut();
+    await _storageService.delete('biometric_enabled');
     _user = null;
     _isBiometricAuthenticated = false;
     _biometricFailCount = 0;
@@ -116,14 +125,28 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<bool> toggleBiometrics(bool enabled) async {
     if (_user == null) return false;
+    _error = null;
     
     if (enabled) {
-      bool success = await _localAuthService.authenticate();
-      if (!success) return false;
+      try {
+        debugPrint("Attempting to toggle biometrics ON. Authenticating...");
+        bool success = await _localAuthService.authenticate();
+        if (!success) {
+          _error = "Authentication failed. Ensure you have a PIN/Fingerprint set up.";
+          notifyListeners();
+          return false;
+        }
+      } catch (e) {
+        _error = "Hardware Error: ${e.toString()}";
+        notifyListeners();
+        return false;
+      }
     }
 
     try {
+      debugPrint("Saving biometric status to Firestore/Storage: $enabled");
       await _firestoreService.updateBiometricStatus(_user!.uid, enabled);
+      await _storageService.save('biometric_enabled', enabled.toString());
       _user = _user!.copyWith(biometricEnabled: enabled);
       if (!enabled) {
         _isBiometricAuthenticated = true;
@@ -137,7 +160,14 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<bool> authenticateWithBiometrics() async {
-    if (_user == null || !_user!.biometricEnabled) return false;
+    // If we don't have a user in memory yet (e.g. fresh refresh), try to get it
+    if (_user == null) {
+      _user = await _authRepository.getCurrentUserModel();
+    }
+    
+    // We still check local storage as the source of truth for the device preference
+    final bioEnabled = await _storageService.read('biometric_enabled');
+    if (bioEnabled != 'true') return false;
     
     bool success = await _localAuthService.authenticate();
     if (success) {
@@ -148,6 +178,29 @@ class AuthViewModel extends ChangeNotifier {
     }
     notifyListeners();
     return success;
+  }
+
+  Future<bool> verifyPassword(String password) async {
+    if (_user == null) return false;
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      // Re-authenticating using login repository logic
+      final result = await _authRepository.login(_user!.email, password);
+      if (result != null) {
+        _isBiometricAuthenticated = true;
+        _biometricFailCount = 0;
+      }
+      _isLoading = false;
+      notifyListeners();
+      return result != null;
+    } catch (e) {
+      _error = "Invalid password. Please try again.";
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   void resetBiometricAuth() {

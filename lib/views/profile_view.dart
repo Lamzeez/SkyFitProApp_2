@@ -156,7 +156,7 @@ class _ProfileViewState extends State<ProfileView> {
                 bool success = await authViewModel.toggleBiometrics(val);
                 if (!success && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Failed to toggle biometrics")),
+                    SnackBar(content: Text(authViewModel.error ?? "Failed to toggle biometrics")),
                   );
                 } else {
                   // Sync to userViewModel

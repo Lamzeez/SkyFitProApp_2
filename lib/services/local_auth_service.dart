@@ -5,35 +5,28 @@ class LocalAuthService {
   final LocalAuthentication _auth = LocalAuthentication();
 
   Future<bool> isBiometricAvailable() async {
-    if (kIsWeb) return false;
     try {
       final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
       final bool canAuthenticate = canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
       return canAuthenticate;
     } catch (e) {
-      print("Error checking biometrics: $e");
+      debugPrint("Error checking biometrics: $e");
       return false;
     }
   }
 
   Future<bool> authenticate() async {
-    if (kIsWeb) {
-      // For the sake of the lab exercise on web, we can simulate success if needed,
-      // but strictly speaking, it's not supported.
-      print("Biometrics not supported on Web. Returning true for simulation.");
-      return true; 
-    }
-    
     try {
+      // Using the most basic call possible to avoid browser security rejections on Web
       return await _auth.authenticate(
-        localizedReason: 'Please authenticate to access your health data',
+        localizedReason: 'Verify your identity to unlock SkyFit Pro',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: true,
+          biometricOnly: false, // Allows PIN fallback if fingerprint is being stubborn
         ),
       );
     } catch (e) {
-      print("Error authenticating: $e");
+      debugPrint("Hardware authentication error: $e");
       return false;
     }
   }

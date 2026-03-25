@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:typed_data';
+import 'dart:convert';
+import 'package:image/image.dart' as img;
 import '../models/user_model.dart';
 import '../services/firestore_service.dart';
 import '../utils/env_config.dart';
@@ -11,7 +14,7 @@ class AuthRepository {
 
   Stream<User?> get authStateChanges => EnvConfig.isFirebaseConfigured ? _auth.authStateChanges() : const Stream.empty();
 
-  Future<UserModel?> register(String email, String password, String fullName, int age, double weight) async {
+  Future<UserModel?> register(String email, String password, String fullName, int age, double weight, {Uint8List? profileImageData}) async {
     if (!EnvConfig.isFirebaseConfigured) {
       return UserModel(uid: "mock_uid", email: email, fullName: fullName, age: age, weight: weight);
     }
@@ -19,12 +22,32 @@ class AuthRepository {
       UserCredential result = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       User? user = result.user;
       if (user != null) {
+        String? profileUrl;
+        
+        // Convert image to Base64 String to bypass Storage CORS issues
+        if (profileImageData != null) {
+          try {
+            img.Image? decodedImage = img.decodeImage(profileImageData);
+            if (decodedImage != null) {
+              if (decodedImage.width > 500 || decodedImage.height > 500) {
+                decodedImage = img.copyResize(decodedImage, width: 500, height: 500);
+              }
+              final compressedData = img.encodeJpg(decodedImage, quality: 75);
+              final base64String = base64Encode(compressedData);
+              profileUrl = "data:image/jpeg;base64,$base64String";
+            }
+          } catch (e) {
+            print("Failed to compress and encode profile picture: $e");
+          }
+        }
+
         UserModel userModel = UserModel(
           uid: user.uid,
           email: email,
           fullName: fullName,
           age: age,
           weight: weight,
+          profilePictureUrl: profileUrl,
         );
         await _firestoreService.createUser(userModel);
         return userModel;

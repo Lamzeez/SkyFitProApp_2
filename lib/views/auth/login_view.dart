@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../services/storage_service.dart';
 import '../widgets/custom_widgets.dart';
 import 'register_view.dart';
 import '../home_view.dart';
@@ -16,6 +17,21 @@ class _LoginViewState extends State<LoginView> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _canUseBiometrics = false;
+  final StorageService _storage = StorageService();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricPreference();
+  }
+
+  Future<void> _checkBiometricPreference() async {
+    final enabled = await _storage.read('biometric_enabled');
+    if (enabled == 'true') {
+      setState(() => _canUseBiometrics = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +87,22 @@ class _LoginViewState extends State<LoginView> {
                     }
                   },
                 ),
+                if (_canUseBiometrics) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: authViewModel.isLoading ? null : () async {
+                      bool success = await authViewModel.authenticateWithBiometrics();
+                      if (success && mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) => const HomeView()),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.fingerprint),
+                    label: const Text("Login with Biometrics"),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: authViewModel.isLoading ? null : () async {
