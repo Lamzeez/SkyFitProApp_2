@@ -28,10 +28,11 @@ class UserModel {
 
   String get weightCategory {
     double val = bmi;
-    if (val < 18.5) return "Underweight";
-    if (val < 25) return "Normal/Athletic";
-    if (val < 30) return "Overweight";
-    return "Obese";
+    if (val <= 0) return 'No Data';
+    if (val < 18.5) return 'Underweight';
+    if (val < 25) return 'Normal';
+    if (val < 30) return 'Overweight';
+    return 'High BMI';
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {

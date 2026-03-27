@@ -8,4 +8,20 @@ class ActivityModel {
     required this.description,
     this.mediaUrl,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'description': description,
+      'mediaUrl': mediaUrl,
+    };
+  }
+
+  factory ActivityModel.fromMap(Map<String, dynamic> map) {
+    return ActivityModel(
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      mediaUrl: map['mediaUrl'],
+    );
+  }
 }

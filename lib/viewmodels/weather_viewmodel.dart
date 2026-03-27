@@ -3,19 +3,49 @@ import '../models/weather_model.dart';
 import '../models/activity_model.dart';
 import '../models/user_model.dart';
 import '../repositories/weather_repository.dart';
+import '../services/storage_service.dart';
+import 'dart:convert';
 
 class WeatherViewModel extends ChangeNotifier {
   final WeatherRepository _weatherRepository = WeatherRepository();
+  final StorageService _storageService = StorageService();
 
   WeatherModel? _weather;
   List<ActivityModel> _suggestedActivities = [];
+  ActivityModel? _selectedActivity;
   bool _isLoading = false;
   String? _error;
 
   WeatherModel? get weather => _weather;
   List<ActivityModel> get suggestedActivities => _suggestedActivities;
+  ActivityModel? get selectedActivity => _selectedActivity;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  void selectActivity(ActivityModel activity) async {
+    _selectedActivity = activity;
+    // Persist activity
+    await _storageService.save('selected_activity', jsonEncode(activity.toMap()));
+    notifyListeners();
+  }
+
+  Future<void> clearSelectedActivity() async {
+    _selectedActivity = null;
+    await _storageService.delete('selected_activity');
+    notifyListeners();
+  }
+
+  Future<void> loadPersistedActivity() async {
+    final data = await _storageService.read('selected_activity');
+    if (data != null) {
+      try {
+        _selectedActivity = ActivityModel.fromMap(jsonDecode(data));
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Error loading persisted activity: $e');
+      }
+    }
+  }
 
   // Structured Activity Data
   final Map<String, List<ActivityModel>> _activityData = {
@@ -50,7 +80,7 @@ class WeatherViewModel extends ChangeNotifier {
       ActivityModel(
         title: '15 Min Tabata',
         description: 'Quick, explosive intervals to boost your metabolism.',
-        mediaUrl: 'https://www.youtube.com/watch?v=KzYstSBeI_o',
+        mediaUrl: 'https://www.youtube.com/watch?v=dRngqiyLQ3Y',
       ),
     ],
     'TaiChi': [
@@ -158,7 +188,7 @@ class WeatherViewModel extends ChangeNotifier {
     // 1. CLEAR / SUNNY / CLOUDY
     if (isClear && !isHeat) {
       if (age < 50) {
-        if (bmiCat == "Obese" || bmiCat == "Overweight" || bmiCat == "Normal/Athletic") {
+        if (bmiCat == "High BMI" || bmiCat == "Overweight" || bmiCat == "Normal") {
           // Provide all running-related videos for high-benefit weight management/cardio
           activities.addAll(_activityData['Running']!);
           activities.add(_activityData['HIIT']![0]); // Add one HIIT for variety
@@ -176,7 +206,7 @@ class WeatherViewModel extends ChangeNotifier {
 
     // 2. RAIN / SNOW (Indoor Focus)
     else if (isRainy) {
-      if (bmiCat == "Obese" || bmiCat == "Overweight" || bmiCat == "Normal/Athletic") {
+      if (bmiCat == "High BMI" || bmiCat == "Overweight" || bmiCat == "Normal") {
         // High calorie burn indoors
         activities.addAll(_activityData['HIIT']!);
       } else {
@@ -186,7 +216,7 @@ class WeatherViewModel extends ChangeNotifier {
 
     // 3. EXTREME HEAT
     else if (isHeat) {
-      if (bmiCat == "Overweight" || bmiCat == "Obese") {
+      if (bmiCat == "Overweight" || bmiCat == "High BMI") {
         activities.addAll(_activityData['Swimming']!);
         activities.add(_activityData['Yoga']![1]); // Add a calm stretching video
       } else {
