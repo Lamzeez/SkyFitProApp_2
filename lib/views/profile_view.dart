@@ -390,7 +390,7 @@ class _ProfileBodyState extends State<ProfileBody> {
   );
 }
 
-  void _showPinSetupDialog(BuildContext context, AuthViewModel authViewModel) {
+  void _showPinSetupDialog(BuildContext context, AuthViewModel authViewModel, UserViewModel userViewModel) {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -520,7 +520,10 @@ class _ProfileBodyState extends State<ProfileBody> {
                             onPressed: () async {
                               if (formKey.currentState!.validate()) {
                                 bool success = await authViewModel.setSecurePin(pinController.text);
-                                if (success && context.mounted) Navigator.pop(context);
+                                if (success) {
+                                  userViewModel.setUser(authViewModel.user);
+                                  if (context.mounted) Navigator.pop(context);
+                                }
                               }
                             },
                             style: ElevatedButton.styleFrom(
@@ -965,9 +968,12 @@ class _ProfileBodyState extends State<ProfileBody> {
                             activeTrackColor: const Color(0xFF4CAF50),
                             onChanged: (val) async {
                               if (val) {
-                                _showPinSetupDialog(context, authViewModel);
+                                _showPinSetupDialog(context, authViewModel, userViewModel);
                               } else {
-                                await authViewModel.removeSecurePin();
+                                bool success = await authViewModel.removeSecurePin();
+                                if (success) {
+                                  userViewModel.setUser(authViewModel.user);
+                                }
                               }
                             },
                           ),

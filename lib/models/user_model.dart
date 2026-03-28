@@ -75,6 +75,7 @@ class UserModel {
     double? height,
     bool? biometricEnabled,
     String? securePin,
+    bool clearPin = false,
     String? profilePictureUrl,
   }) {
     return UserModel(
@@ -85,7 +86,7 @@ class UserModel {
       weight: weight ?? this.weight,
       height: height ?? this.height,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
-      securePin: securePin ?? this.securePin,
+      securePin: clearPin ? null : (securePin ?? this.securePin),
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
     );
   }
