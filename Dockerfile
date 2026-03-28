@@ -1,10 +1,23 @@
 # Stage 1: Build
 FROM ghcr.io/cirruslabs/flutter:stable AS build-env
 
-WORKDIR /app
-COPY . .
+# 1. Fix the "root" issue: Switch to the built-in 'cirrus' user
+USER root
+RUN git config --global --add safe.directory /usr/local/flutter
+RUN chown -R cirrus:cirrus /usr/local/flutter
 
-# ARGs for secrets (same as before)
+# Switch to non-root user for the rest of the build
+USER cirrus
+WORKDIR /app
+
+# 2. Pre-cache the Web SDK to save memory during the actual build
+RUN flutter config --no-analytics
+RUN flutter precache --web
+
+# Copy files as the 'cirrus' user
+COPY --chown=cirrus:cirrus . .
+
+# ARGs for secrets
 ARG OPENWEATHER_API_KEY
 ARG FIREBASE_API_KEY
 ARG FIREBASE_AUTH_DOMAIN
@@ -15,7 +28,7 @@ ARG FIREBASE_APP_ID
 ARG FIREBASE_MEASUREMENT_ID
 ARG FACEBOOK_APP_ID
 
-# Build Web using the pre-installed flutter
+# 3. Build Web
 RUN flutter pub get
 RUN flutter build web --release \
     --dart-define=OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY \
