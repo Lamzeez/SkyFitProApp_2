@@ -1,7 +1,6 @@
 .dart_tool/
 .git/
 .github/
-build/
 ios/
 android/
 windows/
@@ -10,3 +9,7 @@ macos/
 .metadata
 .packages
 pubspec.lock
+# Don't ignore build/web anymore! 
+# build/ is usually ignored, so we explicitly allow the web part
+build/*
+!build/web/
