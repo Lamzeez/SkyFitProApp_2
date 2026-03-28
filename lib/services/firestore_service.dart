@@ -39,6 +39,11 @@ class FirestoreService {
     await _db.collection('users').doc(uid).update({'biometricEnabled': isEnabled});
   }
 
+  Future<void> updateSecurePin(String uid, String? pin) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(uid).update({'securePin': pin});
+  }
+
   Future<void> deleteUser(String uid) async {
     if (!EnvConfig.isFirebaseConfigured) return;
     await _db.collection('users').doc(uid).delete();

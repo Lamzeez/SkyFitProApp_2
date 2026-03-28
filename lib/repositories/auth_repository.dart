@@ -36,14 +36,11 @@ class AuthRepository {
       if (user != null) {
         String? profileUrl;
         
-        // Crop and Resize to 500x500 square to avoid squishing
         if (profileImageData != null) {
           try {
             img.Image? decodedImage = img.decodeImage(profileImageData);
             if (decodedImage != null) {
-              // This crops the image to a square from the center and resizes it
               decodedImage = img.copyResizeCropSquare(decodedImage, size: 500);
-              
               final compressedData = img.encodeJpg(decodedImage, quality: 75);
               final base64String = base64Encode(compressedData);
               profileUrl = "data:image/jpeg;base64,$base64String";
@@ -65,6 +62,11 @@ class AuthRepository {
         await _firestoreService.createUser(userModel);
         return userModel;
       }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw "An account already exists for this email.";
+      }
+      rethrow;
     } catch (e) {
       print("Error in register: $e");
       rethrow;
@@ -74,7 +76,6 @@ class AuthRepository {
 
   Future<UserModel?> login(String email, String password) async {
     if (!EnvConfig.isFirebaseConfigured) {
-      // Mock login for local testing
       return UserModel(
         uid: "mock_uid",
         email: email,
@@ -116,7 +117,6 @@ class AuthRepository {
       if (user != null) {
         UserModel? userModel = await _firestoreService.getUser(user.uid);
         if (userModel == null) {
-          // New user from Google
           userModel = UserModel(
             uid: user.uid,
             email: user.email ?? '',
@@ -137,31 +137,21 @@ class AuthRepository {
   }
 
   Future<UserModel?> signInWithFacebook() async {
-    print("Facebook SSO started...");
     if (!EnvConfig.isFirebaseConfigured) {
-      print("Firebase NOT configured - returning Mock User");
       return UserModel(uid: "mock_facebook_uid", email: "facebook@mock.com", fullName: "Facebook Mock User", age: 0, weight: 0.0, height: 170.0);
     }
     try {
-      print("Calling FacebookAuth.instance.login() with explicit permissions...");
       final LoginResult result = await _facebookAuth.login(
         permissions: ['public_profile', 'email'],
       );
-      print("Facebook Login Status: ${result.status}");
-      
       if (result.status == LoginStatus.success) {
-        print("Facebook Login Success - Access Token: ${result.accessToken?.tokenString}");
         final AuthCredential credential = FacebookAuthProvider.credential(result.accessToken!.tokenString);
-        
-        print("Authenticating with Firebase...");
         final UserCredential userCredential = await _auth.signInWithCredential(credential);
         final User? user = userCredential.user;
 
         if (user != null) {
-          print("Firebase Auth Success - UID: ${user.uid}");
           UserModel? userModel = await _firestoreService.getUser(user.uid);
           if (userModel == null) {
-            print("Creating new Firestore user...");
             userModel = UserModel(
               uid: user.uid,
               email: user.email ?? '',
@@ -174,17 +164,10 @@ class AuthRepository {
           }
           return userModel;
         }
-      } else if (result.status == LoginStatus.cancelled) {
-        print("Facebook Login Cancelled by user.");
-      } else if (result.status == LoginStatus.failed) {
-        print("Facebook Login Failed: ${result.message}");
-        throw result.message ?? "Facebook login failed without a message.";
       }
     } catch (e) {
-      print("Error in Facebook SSO Catch Block: $e");
       rethrow;
     }
-    print("Facebook SSO finished with null result (likely cancelled or failed).");
     return null;
   }
 
@@ -192,17 +175,12 @@ class AuthRepository {
     if (!EnvConfig.isFirebaseConfigured) return;
     try {
       await _googleSignIn.signOut();
-      
-      // Only call logOut if we actually have an active Facebook session
       final accessToken = await _facebookAuth.accessToken;
       if (accessToken != null) {
         await _facebookAuth.logOut();
       }
-      
       await _auth.signOut();
     } catch (e) {
-      print("Error during signOut: $e");
-      // Ensure we at least sign out of Firebase
       await _auth.signOut();
     }
   }
@@ -212,13 +190,10 @@ class AuthRepository {
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        // First delete from Firestore
         await _firestoreService.deleteUser(user.uid);
-        // Then delete from Firebase Auth
         await user.delete();
       }
     } catch (e) {
-      print("Error in deleteAccount: $e");
       rethrow;
     }
   }

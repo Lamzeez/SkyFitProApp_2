@@ -23,6 +23,7 @@ class AuthViewModel extends ChangeNotifier {
   String? _error;
   String? _success;
   bool _isBiometricAuthenticated = false;
+  bool _isPinAuthenticated = false;
   int _biometricFailCount = 0;
   Timer? _errorTimer;
   Timer? _successTimer;
@@ -37,7 +38,9 @@ class AuthViewModel extends ChangeNotifier {
   String? get error => _error;
   String? get success => _success;
   bool get isBiometricAuthenticated => _isBiometricAuthenticated;
+  bool get isPinAuthenticated => _isPinAuthenticated;
   bool get biometricLockedOut => _biometricFailCount >= 3;
+  bool get pinEnabled => _user?.securePin != null && _user!.securePin!.isNotEmpty;
 
   AuthViewModel() {
     _init();
@@ -169,9 +172,10 @@ class AuthViewModel extends ChangeNotifier {
     // Check local storage for biometric preference
     final bioEnabled = await _storageService.read('biometric_enabled');
     
-    // Initially, if no user or biometrics are disabled, we don't need biometric check
-    if (_user == null || bioEnabled != 'true') {
+    // Initially, if no user or biometrics/PIN are disabled, we don't need biometric check
+    if (_user == null || (bioEnabled != 'true' && !pinEnabled)) {
       _isBiometricAuthenticated = true;
+      _isPinAuthenticated = true;
     }
     
     _isLoading = false;
@@ -187,6 +191,7 @@ class AuthViewModel extends ChangeNotifier {
       _user = await _authRepository.login(email, password);
       if (_user != null) {
         _isBiometricAuthenticated = true;
+        _isPinAuthenticated = true;
         _biometricFailCount = 0;
         setSuccess("Welcome back, ${_user!.fullName}!");
       }
@@ -210,6 +215,7 @@ class AuthViewModel extends ChangeNotifier {
       _user = await _authRepository.register(email, password, fullName, age, weight, height, profileImageData: profileImageData);
       if (_user != null) {
         _isBiometricAuthenticated = true;
+        _isPinAuthenticated = true;
         _biometricFailCount = 0;
         setSuccess("Account created successfully!");
       }
@@ -233,6 +239,7 @@ class AuthViewModel extends ChangeNotifier {
       _user = await _authRepository.signInWithGoogle();
       if (_user != null) {
         _isBiometricAuthenticated = true;
+        _isPinAuthenticated = true;
         _biometricFailCount = 0;
         setSuccess("Signed in with Google successfully!");
       } else {
@@ -259,6 +266,7 @@ class AuthViewModel extends ChangeNotifier {
       _user = await _authRepository.signInWithFacebook();
       if (_user != null) {
         _isBiometricAuthenticated = true;
+        _isPinAuthenticated = true;
         _biometricFailCount = 0;
         setSuccess("Signed in with Facebook successfully!");
       } else {
@@ -284,6 +292,7 @@ class AuthViewModel extends ChangeNotifier {
       await _authRepository.deleteAccount();
       _user = null;
       _isBiometricAuthenticated = false;
+      _isPinAuthenticated = false;
       _biometricFailCount = 0;
       setSuccess("Your account has been permanently deleted.");
       _isLoading = false;
@@ -312,6 +321,7 @@ class AuthViewModel extends ChangeNotifier {
     await _storageService.delete('biometric_enabled');
     _user = null;
     _isBiometricAuthenticated = false;
+    _isPinAuthenticated = false;
     _biometricFailCount = 0;
     if (showSuccess) {
       setSuccess("Logged out successfully.");
@@ -359,6 +369,46 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  Future<bool> setSecurePin(String pin) async {
+    if (_user == null) return false;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _firestoreService.updateSecurePin(_user!.uid, pin);
+      _user = _user!.copyWith(securePin: pin);
+      _isPinAuthenticated = true;
+      setSuccess("Secure PIN set successfully!");
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      setError("Failed to set PIN: ${e.toString()}");
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> removeSecurePin() async {
+    if (_user == null) return false;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _firestoreService.updateSecurePin(_user!.uid, null);
+      _user = _user!.copyWith(securePin: null);
+      _isPinAuthenticated = true;
+      setSuccess("Secure PIN disabled.");
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      setError("Failed to remove PIN: ${e.toString()}");
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> authenticateWithBiometrics() async {
     // If we don't have a user in memory yet (e.g. fresh refresh), try to get it
     if (_user == null) {
@@ -380,6 +430,20 @@ class AuthViewModel extends ChangeNotifier {
     return success;
   }
 
+  Future<bool> verifyPin(String enteredPin) async {
+    if (_user == null || _user!.securePin == null) return false;
+    if (_user!.securePin == enteredPin) {
+      _isPinAuthenticated = true;
+      _isBiometricAuthenticated = true; // PIN serves as a manual override for Biometrics
+      _biometricFailCount = 0;
+      notifyListeners();
+      return true;
+    } else {
+      setError("Incorrect PIN. Please try again.");
+      return false;
+    }
+  }
+
   Future<bool> verifyPassword(String password) async {
     if (_user == null) return false;
     _isLoading = true;
@@ -390,6 +454,7 @@ class AuthViewModel extends ChangeNotifier {
       final result = await _authRepository.login(_user!.email, password);
       if (result != null) {
         _isBiometricAuthenticated = true;
+        _isPinAuthenticated = true;
         _biometricFailCount = 0;
       }
       _isLoading = false;
@@ -405,6 +470,7 @@ class AuthViewModel extends ChangeNotifier {
 
   void resetBiometricAuth() {
     _isBiometricAuthenticated = false;
+    _isPinAuthenticated = false;
     _biometricFailCount = 0;
     notifyListeners();
   }

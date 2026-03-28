@@ -6,6 +6,7 @@ class UserModel {
   final double weight;
   final double height; // Height in cm
   final bool biometricEnabled;
+  final String? securePin; // 4-6 digit PIN
   final String? profilePictureUrl;
 
   UserModel({
@@ -16,6 +17,7 @@ class UserModel {
     required this.weight,
     required this.height,
     this.biometricEnabled = false,
+    this.securePin,
     this.profilePictureUrl,
   });
 
@@ -48,6 +50,7 @@ class UserModel {
       weight: (map['weight'] as num?)?.toDouble() ?? 0.0,
       height: (map['height'] as num?)?.toDouble() ?? 170.0, // Default 170cm
       biometricEnabled: map['biometricEnabled'] ?? false,
+      securePin: map['securePin'],
       profilePictureUrl: map['profilePictureUrl'],
     );
   }
@@ -60,6 +63,7 @@ class UserModel {
       'weight': weight,
       'height': height,
       'biometricEnabled': biometricEnabled,
+      'securePin': securePin,
       'profilePictureUrl': profilePictureUrl,
     };
   }
@@ -70,6 +74,7 @@ class UserModel {
     double? weight,
     double? height,
     bool? biometricEnabled,
+    String? securePin,
     String? profilePictureUrl,
   }) {
     return UserModel(
@@ -80,6 +85,7 @@ class UserModel {
       weight: weight ?? this.weight,
       height: height ?? this.height,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
+      securePin: securePin ?? this.securePin,
       profilePictureUrl: profilePictureUrl ?? this.profilePictureUrl,
     );
   }

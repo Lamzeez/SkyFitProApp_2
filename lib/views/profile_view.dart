@@ -390,6 +390,75 @@ class _ProfileBodyState extends State<ProfileBody> {
   );
 }
 
+  void _showPinSetupDialog(BuildContext context, AuthViewModel authViewModel) {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => PointerInterceptor(
+        child: AlertDialog(
+          title: const Text('Setup Secure PIN'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Enter a 4-6 digit PIN to secure your account.'),
+                const SizedBox(height: 20),
+                CustomTextField(
+                  controller: pinController,
+                  label: 'New PIN',
+                  keyboardType: TextInputType.number,
+                  isPassword: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  validator: (v) {
+                    if (v == null || v.length < 4) return 'PIN must be 4-6 digits';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                CustomTextField(
+                  controller: confirmController,
+                  label: 'Confirm PIN',
+                  keyboardType: TextInputType.number,
+                  isPassword: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  validator: (v) {
+                    if (v != pinController.text) return 'PINs do not match';
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  await authViewModel.setSecurePin(pinController.text);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text('Save PIN'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _sheetLabel(String text, bool isDark) {
     return Text(
       text,
@@ -787,6 +856,29 @@ class _ProfileBodyState extends State<ProfileBody> {
                                 authViewModel.setError(authViewModel.error ?? 'Failed to toggle biometrics');
                               } else {
                                 userViewModel.setUser(authViewModel.user);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      Divider(
+                          height: 1,
+                          color: isDark ? Colors.white10 : Colors.black12),
+                      SettingsTile(
+                        icon: Icons.lock_outline,
+                        iconColor: const Color(0xFF4CAF50),
+                        title: 'Secure PIN',
+                        subtitle: '4-6 digit security code',
+                        trailing: Transform.scale(
+                          scale: 0.85,
+                          child: Switch(
+                            value: authViewModel.pinEnabled,
+                            activeTrackColor: const Color(0xFF4CAF50),
+                            onChanged: (val) async {
+                              if (val) {
+                                _showPinSetupDialog(context, authViewModel);
+                              } else {
+                                await authViewModel.removeSecurePin();
                               }
                             },
                           ),

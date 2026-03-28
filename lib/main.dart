@@ -127,7 +127,7 @@ class _SkyFitProAppState extends State<SkyFitProApp> {
               if (child != null) child,
               // Session Warning Banner
               Positioned(
-                top: MediaQuery.of(context).padding.top + 370,
+                top: MediaQuery.of(context).padding.top + 330,
                 left: 20,
                 right: 20,
                 child: Material(
@@ -139,7 +139,7 @@ class _SkyFitProAppState extends State<SkyFitProApp> {
               ),
               // Global Error Banner
               Positioned(
-                top: MediaQuery.of(context).padding.top + 370,
+                top: MediaQuery.of(context).padding.top + 330,
                 left: 20,
                 right: 20,
                 child: Material(
@@ -155,7 +155,7 @@ class _SkyFitProAppState extends State<SkyFitProApp> {
               ),
               // Global Success Banner
               Positioned(
-                top: MediaQuery.of(context).padding.top + 370,
+                top: MediaQuery.of(context).padding.top + 330,
                 left: 20,
                 right: 20,
                 child: Material(
@@ -179,7 +179,7 @@ class _SkyFitProAppState extends State<SkyFitProApp> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (authViewModel.user != null) {
-      if (!authViewModel.isBiometricAuthenticated) {
+      if (!authViewModel.isBiometricAuthenticated || !authViewModel.isPinAuthenticated) {
         return const BiometricLockView();
       }
 
