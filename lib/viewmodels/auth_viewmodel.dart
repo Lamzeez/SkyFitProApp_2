@@ -8,9 +8,14 @@ import '../services/local_auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/storage_service.dart';
 import '../utils/env_config.dart';
-
 import 'dart:math';
 import '../services/email_service.dart';
+
+// Import the web helper functions (loadCredentialId, getLastRegisteredCredentialId,
+// getStoredRpId). On mobile the conditional import resolves to the stub which
+// provides no-op versions of all three, so this is safe on all platforms.
+import '../services/local_auth_service_web.dart'
+    if (dart.library.io) '../services/local_auth_service_stub.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
@@ -46,11 +51,12 @@ class AuthViewModel extends ChangeNotifier {
     _init();
   }
 
+  // ── Message helpers ───────────────────────────────────────────────────────
+
   void setError(String message, {double seconds = 2.8}) {
     _errorTimer?.cancel();
     _error = message;
-    _errorTimer =
-        Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
+    _errorTimer = Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
       _error = null;
       notifyListeners();
     });
@@ -65,8 +71,7 @@ class AuthViewModel extends ChangeNotifier {
   void setSuccess(String message, {double seconds = 2.8}) {
     _successTimer?.cancel();
     _success = message;
-    _successTimer =
-        Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
+    _successTimer = Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
       _success = null;
       notifyListeners();
     });
@@ -78,12 +83,13 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── OTP / Registration ────────────────────────────────────────────────────
+
   Future<bool> sendOTPForRegistration(
       String email, Map<String, dynamic> registrationData) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
       bool isTaken = await _firestoreService.isEmailTaken(email);
       if (isTaken) {
@@ -92,10 +98,8 @@ class AuthViewModel extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-
-      final random = Random();
-      final otp = (100000 + random.nextInt(900000)).toString();
-
+      final otp =
+          (100000 + Random().nextInt(900000)).toString();
       bool sent = await EmailService.sendOTP(email, otp);
       if (sent) {
         _currentOTP = otp;
@@ -110,7 +114,6 @@ class AuthViewModel extends ChangeNotifier {
     } catch (e) {
       setError(e.toString());
     }
-
     _isLoading = false;
     notifyListeners();
     return false;
@@ -121,37 +124,27 @@ class AuthViewModel extends ChangeNotifier {
       setError("Session expired. Please register again.");
       return false;
     }
-
     if (enteredOTP != _currentOTP) {
       setError("Invalid verification code. Please check and try again.");
       return false;
     }
-
     if (DateTime.now().difference(_otpSentTime!).inMinutes > 10) {
       setError("Verification code expired. Please request a new one.");
       return false;
     }
-
     _isLoading = true;
     notifyListeners();
-
     try {
       final data = _pendingRegistrationData!;
       bool success = await register(
-        data['email'],
-        data['password'],
-        data['fullName'],
-        data['age'],
-        data['weight'],
-        data['height'],
+        data['email'], data['password'], data['fullName'],
+        data['age'], data['weight'], data['height'],
         profileImageData: data['profileImageData'],
       );
-
       if (success) {
         _currentOTP = null;
         _pendingRegistrationData = null;
       }
-
       _isLoading = false;
       notifyListeners();
       return success;
@@ -169,21 +162,22 @@ class AuthViewModel extends ChangeNotifier {
         _pendingRegistrationData!['email'], _pendingRegistrationData!);
   }
 
+  // ── Init ──────────────────────────────────────────────────────────────────
+
   Future<void> _init() async {
     _isLoading = true;
     notifyListeners();
     _user = await _authRepository.getCurrentUserModel();
-
     final bioEnabled = await _storageService.read('biometric_enabled');
-
     if (_user == null || (bioEnabled != 'true' && !pinEnabled)) {
       _isBiometricAuthenticated = true;
       _isPinAuthenticated = true;
     }
-
     _isLoading = false;
     notifyListeners();
   }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
 
   Future<bool> login(String email, String password) async {
     _isLoading = true;
@@ -212,12 +206,8 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<bool> register(
-    String email,
-    String password,
-    String fullName,
-    int age,
-    double weight,
-    double height, {
+    String email, String password, String fullName,
+    int age, double weight, double height, {
     Uint8List? profileImageData,
   }) async {
     _isLoading = true;
@@ -313,12 +303,11 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      String errorMessage = e.toString();
-      if (errorMessage.contains('requires-recent-login')) {
-        setError(
-            "For security, please log in again before deleting your account.");
+      String msg = e.toString();
+      if (msg.contains('requires-recent-login')) {
+        setError("For security, please log in again before deleting your account.");
       } else {
-        setError(errorMessage);
+        setError(msg);
       }
       _isLoading = false;
       notifyListeners();
@@ -340,82 +329,120 @@ class AuthViewModel extends ChangeNotifier {
     _isBiometricAuthenticated = false;
     _isPinAuthenticated = false;
     _biometricFailCount = 0;
-    if (showSuccess) {
-      setSuccess("Logged out successfully.");
-    }
+    if (showSuccess) setSuccess("Logged out successfully.");
     notifyListeners();
   }
+
+  // ── Biometrics ────────────────────────────────────────────────────────────
 
   Future<bool> toggleBiometrics(bool enabled) async {
     if (_user == null) return false;
     _error = null;
 
     if (enabled) {
-      // ── Step 1: Check whether the browser/device can even do WebAuthn ──────
+      // 1. Check the browser supports WebAuthn
       bool available = await _localAuthService.isBiometricAvailable();
       if (!available) {
-        if (kIsWeb) {
-          // The WebAuthn API itself is missing — very old browser
-          setError(
-            "Your browser does not support biometric login. "
-            "Please use Chrome, Edge, or Safari on a modern device.",
-            seconds: 6,
-          );
-        } else {
-          setError(
-            "Biometrics not available. "
-            "Make sure a fingerprint or face is enrolled in your device settings.",
-            seconds: 6,
-          );
-        }
+        setError(
+          kIsWeb
+              ? "Your browser does not support biometric login. "
+                "Use Chrome, Edge, or Safari on a modern device."
+              : "Biometrics not available. Enroll a fingerprint in settings first.",
+          seconds: 6,
+        );
         notifyListeners();
         return false;
       }
 
-      // ── Step 2: Trigger the actual registration prompt ───────────────────
-      // On web  → WebAuthn navigator.credentials.create() — browser shows
-      //           the OS fingerprint/FaceID/Windows Hello dialog.
-      // On mobile → local_auth.authenticate() — returns true immediately.
-      //
-      // If the user's device has NO biometric enrolled at all, the browser
-      // will show its own error inside the native dialog at this point.
-      // We surface that as a clear message rather than a silent failure.
+      // 2. Trigger the OS fingerprint registration prompt
       bool registered = await _localAuthService.registerBiometric(
         _user!.uid,
         _user!.fullName,
       );
       if (!registered) {
-        if (kIsWeb) {
-          setError(
-            "Biometric setup was cancelled or your device has no fingerprint/FaceID enrolled. "
-            "Enroll a fingerprint in your OS settings, then try again.",
-            seconds: 7,
-          );
-        } else {
-          setError(
-            "Biometric setup failed. Please try again.",
-            seconds: 5,
-          );
-        }
+        setError(
+          kIsWeb
+              ? "Fingerprint setup was cancelled, or no fingerprint is enrolled "
+                "on this device. Go to phone Settings → Security → Fingerprint and "
+                "add one, then try again."
+              : "Biometric setup failed. Please try again.",
+          seconds: 8,
+        );
         notifyListeners();
         return false;
       }
+
+      // 3. Save the credential ID to Firestore so it survives Incognito sessions.
+      //    getLastRegisteredCredentialId() and getStoredRpId() are both defined
+      //    in local_auth_service_web.dart (and no-ops in the stub).
+      if (kIsWeb) {
+        final credentialId = getLastRegisteredCredentialId();
+        final rpId = getStoredRpId();
+        if (credentialId != null && credentialId.isNotEmpty) {
+          await _firestoreService.saveWebAuthnCredentialId(
+              _user!.uid, credentialId, rpId);
+          debugPrint('[AuthVM] Credential ID saved to Firestore: $credentialId');
+        }
+      }
+    } else {
+      // Disabling — remove the credential from Firestore
+      if (kIsWeb) {
+        await _firestoreService.clearWebAuthnCredential(_user!.uid);
+      }
     }
 
-    // ── Step 3: Persist the preference ──────────────────────────────────────
+    // 4. Persist the enabled flag
     try {
       await _firestoreService.updateBiometricStatus(_user!.uid, enabled);
       await _storageService.save('biometric_enabled', enabled.toString());
       _user = _user!.copyWith(biometricEnabled: enabled);
-      if (!enabled) {
-        _isBiometricAuthenticated = true;
-      }
+      if (!enabled) _isBiometricAuthenticated = true;
       notifyListeners();
       return true;
     } catch (e) {
       setError(e.toString());
       return false;
     }
+  }
+
+  Future<bool> authenticateWithBiometrics() async {
+    if (_user == null) {
+      _user = await _authRepository.getCurrentUserModel();
+    }
+
+    final bioEnabled = await _storageService.read('biometric_enabled');
+    if (bioEnabled != 'true') return false;
+
+    // Incognito fix: localStorage is wiped when an Incognito session ends.
+    // Restore the credential from Firestore into localStorage before prompting.
+    if (kIsWeb && _user != null) {
+      try {
+        final cred = await _firestoreService.getWebAuthnCredential(_user!.uid);
+        if (cred.credentialId != null && cred.credentialId!.isNotEmpty) {
+          // loadCredentialId() is from local_auth_service_web.dart
+          loadCredentialId(cred.credentialId!, cred.rpId ?? '');
+        } else {
+          debugPrint('[AuthVM] No WebAuthn credential in Firestore.');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('[AuthVM] Failed to load credential from Firestore: $e');
+      }
+    }
+
+    bool success = await _localAuthService.authenticate();
+    if (success) {
+      _isBiometricAuthenticated = true;
+      _biometricFailCount = 0;
+    } else {
+      _biometricFailCount++;
+      if (_biometricFailCount >= 3) {
+        setError("Too many failed attempts. Please use your password.",
+            seconds: 999);
+      }
+    }
+    notifyListeners();
+    return success;
   }
 
   Future<bool> setSecurePin(String pin) async {
@@ -456,29 +483,6 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-  }
-
-  Future<bool> authenticateWithBiometrics() async {
-    if (_user == null) {
-      _user = await _authRepository.getCurrentUserModel();
-    }
-
-    final bioEnabled = await _storageService.read('biometric_enabled');
-    if (bioEnabled != 'true') return false;
-
-    bool success = await _localAuthService.authenticate();
-    if (success) {
-      _isBiometricAuthenticated = true;
-      _biometricFailCount = 0;
-    } else {
-      _biometricFailCount++;
-      if (_biometricFailCount >= 3) {
-        setError("Too many failed attempts. Please use your password.",
-            seconds: 999);
-      }
-    }
-    notifyListeners();
-    return success;
   }
 
   Future<bool> verifyPin(String enteredPin) async {

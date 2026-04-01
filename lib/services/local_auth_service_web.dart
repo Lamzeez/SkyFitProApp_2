@@ -1,5 +1,4 @@
 // local_auth_service_web.dart — compiled ONLY on web builds.
-// Uses dart:js_interop + dart:js_interop_unsafe + package:web (all non-deprecated).
 
 import 'dart:async';
 import 'dart:convert';
@@ -9,8 +8,6 @@ import 'dart:js_interop_unsafe';
 import 'package:web/web.dart' as web;
 import 'package:flutter/foundation.dart';
 
-// ── JS interop: PublicKeyCredential static method ─────────────────────────────
-
 @JS('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable')
 external JSPromise<JSBoolean> _isUVPAAvailable();
 
@@ -18,47 +15,20 @@ external JSPromise<JSBoolean> _isUVPAAvailable();
 
 Future<bool> webAuthnIsAvailable() async {
   try {
-    // 1. Does the browser expose the WebAuthn API at all?
     final hasApi = web.window.getProperty<JSAny?>('PublicKeyCredential'.toJS);
     if (hasApi == null) {
-      debugPrint('[WebAuthn] PublicKeyCredential API not found in this browser.');
+      debugPrint('[WebAuthn] API not available in this browser.');
       return false;
     }
-
-    // 2. Is a platform authenticator (biometric hardware) enrolled?
-    //    This returns false on devices with no fingerprint/FaceID/Windows Hello set up.
-    //    It also returns false if called from an insecure (HTTP) origin.
     try {
-      final result = await _isUVPAAvailable().toDart;
-      final enrolled = result.toDart;
-      debugPrint('[WebAuthn] Platform authenticator available: $enrolled');
-
-      // 3. If no biometric is enrolled, fall back to checking whether
-      //    the browser supports WebAuthn at all (conditional mediation).
-      //    This allows users who only have a PIN/password device authenticator
-      //    to still use the credential flow.
-      if (!enrolled) {
-        // Check if ConditionalMediationAvailable exists (Chrome 108+)
-        final hasConditional = web.window.getProperty<JSAny?>(
-          'PublicKeyCredential'.toJS,
-        );
-        // We already know the API exists — treat as available and let the
-        // browser decide at registration time. This avoids false negatives
-        // on devices where UVPA check is unreliable (some Android browsers).
-        debugPrint(
-          '[WebAuthn] No platform authenticator enrolled, but WebAuthn API exists. '
-          'Allowing toggle — browser will show its own error if hardware is missing.',
-        );
-        return true;
-      }
-
-      return true;
-    } catch (uvpaError) {
-      // Some browsers throw if called in an insecure context
-      debugPrint('[WebAuthn] UVPA check threw: $uvpaError');
-      // If the API exists but UVPA throws, still allow — let the browser decide
-      return true;
+      final uvpa = await _isUVPAAvailable().toDart;
+      debugPrint('[WebAuthn] Platform authenticator enrolled: ${uvpa.toDart}');
+    } catch (e) {
+      debugPrint('[WebAuthn] UVPA check skipped: $e');
     }
+    // Return true as long as the API exists — let the browser reject at
+    // prompt time if no hardware is enrolled, rather than blocking here.
+    return true;
   } catch (e) {
     debugPrint('[WebAuthn] Availability check failed: $e');
     return false;
@@ -68,12 +38,8 @@ Future<bool> webAuthnIsAvailable() async {
 Future<bool> webAuthnRegister(String userId, String userName) async {
   try {
     _ensureHelperScript();
-
-    // rpId MUST match the hostname of the page exactly.
-    // window.location.hostname gives us "skyfit-pro-app.onrender.com" on Render,
-    // or "localhost" locally — both work correctly this way.
     final hostname = web.window.location.hostname;
-    debugPrint('[WebAuthn] Registering credential for rpId: $hostname');
+    debugPrint('[WebAuthn] Registering for rpId: $hostname');
 
     final args = jsonEncode({
       'challenge': _randomB64(),
@@ -84,10 +50,9 @@ Future<bool> webAuthnRegister(String userId, String userName) async {
       'displayName': userName,
     });
 
-    final fn = web.window
-        .getProperty<JSFunction?>('skyfit_webauthn_register'.toJS);
+    final fn = web.window.getProperty<JSFunction?>('skyfit_webauthn_register'.toJS);
     if (fn == null) {
-      debugPrint('[WebAuthn] Helper script not loaded — register fn missing.');
+      debugPrint('[WebAuthn] register fn not found.');
       return false;
     }
 
@@ -95,17 +60,20 @@ Future<bool> webAuthnRegister(String userId, String userName) async {
     final result = await promise.toDart;
 
     if (result == null) {
-      debugPrint('[WebAuthn] Register returned null — user likely cancelled.');
+      debugPrint('[WebAuthn] Register returned null — cancelled or no hardware.');
       return false;
     }
 
     final credentialId = (result as JSString).toDart;
     if (credentialId.isEmpty) return false;
 
-    // Store credential ID and the rpId it was created for
+    // Cache in localStorage for fast same-session use
     web.window.localStorage.setItem('skyfit_webauthn_id', credentialId);
     web.window.localStorage.setItem('skyfit_webauthn_rpid', hostname);
-    debugPrint('[WebAuthn] Credential registered successfully: $credentialId');
+    // Expose for auth_viewmodel to pick up and save to Firestore
+    web.window.localStorage.setItem('skyfit_webauthn_pending_id', credentialId);
+
+    debugPrint('[WebAuthn] Credential registered: $credentialId');
     return true;
   } catch (e) {
     debugPrint('[WebAuthn] Registration failed: $e');
@@ -115,17 +83,14 @@ Future<bool> webAuthnRegister(String userId, String userName) async {
 
 Future<bool> webAuthnAuthenticate() async {
   try {
-    final storedId =
-        web.window.localStorage.getItem('skyfit_webauthn_id');
+    final storedId = web.window.localStorage.getItem('skyfit_webauthn_id');
+    final storedRpId = web.window.localStorage.getItem('skyfit_webauthn_rpid')
+        ?? web.window.location.hostname;
+
     if (storedId == null || storedId.isEmpty) {
-      debugPrint('[WebAuthn] No stored credential — user must enable biometrics first.');
+      debugPrint('[WebAuthn] No credential in localStorage.');
       return false;
     }
-
-    // Use the rpId that was set at registration time
-    final storedRpId =
-        web.window.localStorage.getItem('skyfit_webauthn_rpid') ??
-        web.window.location.hostname;
 
     debugPrint('[WebAuthn] Authenticating with rpId: $storedRpId');
     _ensureHelperScript();
@@ -136,10 +101,9 @@ Future<bool> webAuthnAuthenticate() async {
       'credentialId': storedId,
     });
 
-    final fn = web.window
-        .getProperty<JSFunction?>('skyfit_webauthn_authenticate'.toJS);
+    final fn = web.window.getProperty<JSFunction?>('skyfit_webauthn_authenticate'.toJS);
     if (fn == null) {
-      debugPrint('[WebAuthn] Helper script not loaded — authenticate fn missing.');
+      debugPrint('[WebAuthn] authenticate fn not found.');
       return false;
     }
 
@@ -156,17 +120,36 @@ Future<bool> webAuthnAuthenticate() async {
   }
 }
 
+/// Returns the credential ID that was just registered.
+/// auth_viewmodel calls this immediately after webAuthnRegister() returns true
+/// to get the value it needs to save to Firestore.
+String? getLastRegisteredCredentialId() {
+  return web.window.localStorage.getItem('skyfit_webauthn_pending_id');
+}
+
+/// Returns the rpId that was used at registration time.
+String getStoredRpId() {
+  return web.window.localStorage.getItem('skyfit_webauthn_rpid')
+      ?? web.window.location.hostname;
+}
+
+/// Loads [credentialId] and [rpId] from Firestore (supplied by auth_viewmodel)
+/// into localStorage so webAuthnAuthenticate() can find them.
+/// Called before every authentication attempt when on web.
+void loadCredentialId(String credentialId, String rpId) {
+  web.window.localStorage.setItem('skyfit_webauthn_id', credentialId);
+  if (rpId.isNotEmpty) {
+    web.window.localStorage.setItem('skyfit_webauthn_rpid', rpId);
+  }
+  debugPrint('[WebAuthn] Credential loaded from Firestore into localStorage.');
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 String _randomB64() {
   final bytes = List<int>.generate(32, (_) => Random.secure().nextInt(256));
   return base64Url.encode(bytes);
 }
-
-// ── JS helper script ──────────────────────────────────────────────────────────
-// Injected once into <head>. Exposes two async functions on window that handle
-// all ArrayBuffer ↔ base64url conversion and the WebAuthn API calls.
-// rpId is passed in the JSON args so it matches the registration origin exactly.
 
 bool _helperInjected = false;
 
@@ -183,7 +166,6 @@ void _ensureHelperScript() {
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
     return buf.buffer;
   }
-
   function bufferToB64(buffer) {
     const bytes = new Uint8Array(buffer);
     let bin = '';
@@ -197,10 +179,7 @@ void _ensureHelperScript() {
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: b64ToBuffer(o.challenge),
-          rp: {
-            id: o.rpId,
-            name: o.rpName,
-          },
+          rp: { id: o.rpId, name: o.rpName },
           user: {
             id: b64ToBuffer(o.userId),
             name: o.userName,
@@ -220,7 +199,7 @@ void _ensureHelperScript() {
       });
       return credential ? bufferToB64(credential.rawId) : null;
     } catch (err) {
-      console.warn('[SkyFit WebAuthn] Register error:', err.name, err.message);
+      console.warn('[SkyFit WebAuthn] Register error:', err.name, '-', err.message);
       return null;
     }
   };
@@ -232,28 +211,25 @@ void _ensureHelperScript() {
         publicKey: {
           rpId: o.rpId,
           challenge: b64ToBuffer(o.challenge),
-          allowCredentials: [
-            {
-              id: b64ToBuffer(o.credentialId),
-              type: 'public-key',
-              transports: ['internal'],
-            },
-          ],
+          allowCredentials: [{
+            id: b64ToBuffer(o.credentialId),
+            type: 'public-key',
+            transports: ['internal'],
+          }],
           userVerification: 'required',
           timeout: 60000,
         },
       });
       return assertion !== null;
     } catch (err) {
-      console.warn('[SkyFit WebAuthn] Authenticate error:', err.name, err.message);
+      console.warn('[SkyFit WebAuthn] Authenticate error:', err.name, '-', err.message);
       return false;
     }
   };
 })();
 """;
 
-  final script =
-      web.document.createElement('script') as web.HTMLScriptElement;
+  final script = web.document.createElement('script') as web.HTMLScriptElement;
   script.textContent = src;
   web.document.head!.appendChild(script);
 }

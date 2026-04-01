@@ -12,7 +12,6 @@ class FirestoreService {
 
   Future<UserModel?> getUser(String uid) async {
     if (!EnvConfig.isFirebaseConfigured) {
-      // Return a mock user for local testing if not configured
       return UserModel(
         uid: uid,
         email: "test@example.com",
@@ -36,7 +35,10 @@ class FirestoreService {
 
   Future<void> updateBiometricStatus(String uid, bool isEnabled) async {
     if (!EnvConfig.isFirebaseConfigured) return;
-    await _db.collection('users').doc(uid).update({'biometricEnabled': isEnabled});
+    await _db
+        .collection('users')
+        .doc(uid)
+        .update({'biometricEnabled': isEnabled});
   }
 
   Future<void> updateSecurePin(String uid, String? pin) async {
@@ -46,12 +48,63 @@ class FirestoreService {
 
   Future<bool> isEmailTaken(String email) async {
     if (!EnvConfig.isFirebaseConfigured) return false;
-    final query = await _db.collection('users').where('email', isEqualTo: email).limit(1).get();
+    final query = await _db
+        .collection('users')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
     return query.docs.isNotEmpty;
   }
 
   Future<void> deleteUser(String uid) async {
     if (!EnvConfig.isFirebaseConfigured) return;
     await _db.collection('users').doc(uid).delete();
+  }
+
+  // ── WebAuthn credential storage ───────────────────────────────────────────
+  // The WebAuthn credential ID is a device-bound token produced by the
+  // browser during registration. We store it in Firestore so it survives
+  // Incognito sessions (where localStorage is wiped on session end).
+  //
+  // Firestore field: users/{uid}.webAuthnCredentialId  (String | null)
+  // Firestore field: users/{uid}.webAuthnRpId          (String | null)
+
+  /// Saves the WebAuthn credential ID and the rpId it was registered for.
+  /// Called once when the user enables biometric login.
+  Future<void> saveWebAuthnCredentialId(
+      String uid, String credentialId, String rpId) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(uid).update({
+      'webAuthnCredentialId': credentialId,
+      'webAuthnRpId': rpId,
+    });
+  }
+
+  /// Fetches the stored WebAuthn credential ID and rpId for [uid].
+  /// Returns null values if none are stored yet.
+  Future<({String? credentialId, String? rpId})> getWebAuthnCredential(
+      String uid) async {
+    if (!EnvConfig.isFirebaseConfigured) {
+      return (credentialId: null, rpId: null);
+    }
+    try {
+      final doc = await _db.collection('users').doc(uid).get();
+      final data = doc.data();
+      return (
+        credentialId: data?['webAuthnCredentialId'] as String?,
+        rpId: data?['webAuthnRpId'] as String?,
+      );
+    } catch (e) {
+      return (credentialId: null, rpId: null);
+    }
+  }
+
+  /// Clears the stored WebAuthn credential when biometrics are disabled.
+  Future<void> clearWebAuthnCredential(String uid) async {
+    if (!EnvConfig.isFirebaseConfigured) return;
+    await _db.collection('users').doc(uid).update({
+      'webAuthnCredentialId': null,
+      'webAuthnRpId': null,
+    });
   }
 }
