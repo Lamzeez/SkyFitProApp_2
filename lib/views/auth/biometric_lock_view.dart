@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../widgets/custom_widgets.dart';
+// ✅ ADDED: Need HomeView to navigate after successful unlock
+import '../home_view.dart';
 
 class BiometricLockView extends StatefulWidget {
   const BiometricLockView({super.key});
@@ -21,13 +23,31 @@ class _BiometricLockViewState extends State<BiometricLockView> {
   @override
   void initState() {
     super.initState();
-    // Auto-setup initial state based on what's enabled
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authVM = context.read<AuthViewModel>();
-      if (!authVM.user!.biometricEnabled && authVM.pinEnabled) {
+      // ✅ FIX: Added null-safety guard — user could be null on first load
+      if (authVM.user != null && !authVM.user!.biometricEnabled && authVM.pinEnabled) {
         setState(() => _usePin = true);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  // ✅ ADDED: Central success handler used by all three auth paths
+  // (biometrics, PIN, password). Navigates to HomeView and resets lockout.
+  void _onUnlockSuccess(AuthViewModel authVM) {
+    if (!mounted) return;
+    authVM.resetBiometricLockout();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomeView()),
+    );
   }
 
   @override
@@ -38,7 +58,6 @@ class _BiometricLockViewState extends State<BiometricLockView> {
 
     if (user == null) return const SizedBox.shrink();
 
-    // Determine what to show
     bool isLockedOut = authViewModel.biometricLockedOut || _usePassword;
     bool showPinEntry = !isLockedOut && _usePin;
     bool showBiometricButton = !isLockedOut && !showPinEntry && user.biometricEnabled;
@@ -70,7 +89,7 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                 ),
                 const SizedBox(height: 40),
                 
-                // 1. PASSWORD FALLBACK (Shown if 3 fails or user selects it)
+                // 1. PASSWORD FALLBACK
                 if (isLockedOut) ...[
                   Text(
                     authViewModel.biometricLockedOut 
@@ -92,7 +111,9 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                     isLoading: authViewModel.isLoading,
                     onPressed: () async {
                       if (_formKey.currentState!.validate()) {
-                        await authViewModel.verifyPassword(_passwordController.text);
+                        bool success = await authViewModel.verifyPassword(_passwordController.text);
+                        // ✅ ADDED: Navigate on success — previously missing
+                        if (success) _onUnlockSuccess(authViewModel);
                       }
                     },
                   ),
@@ -118,18 +139,23 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                     text: "Verify PIN",
                     isLoading: authViewModel.isLoading,
                     onPressed: () async {
-                      // Removed form validation to ensure every click counts as an attempt
-                      await authViewModel.verifyPin(_pinController.text);
+                      bool success = await authViewModel.verifyPin(_pinController.text);
+                      // ✅ ADDED: Navigate on success — previously missing
+                      if (success) _onUnlockSuccess(authViewModel);
                     },
                   ),
                 ]
 
-                // 3. BIOMETRIC BUTTON (Only if enabled)
+                // 3. BIOMETRIC BUTTON
                 else if (showBiometricButton) ...[
                   CustomButton(
                     text: "Authenticate with Biometrics",
                     onPressed: () async {
-                      await authViewModel.authenticateWithBiometrics();
+                      bool success = await authViewModel.authenticateWithBiometrics();
+                      // ✅ ADDED: Navigate on success — previously missing.
+                      // On failure × 3, biometricLockedOut becomes true and the
+                      // widget rebuilds automatically into the password fallback.
+                      if (success) _onUnlockSuccess(authViewModel);
                     },
                   ),
                 ],
@@ -138,7 +164,6 @@ class _BiometricLockViewState extends State<BiometricLockView> {
 
                 // --- FOOTER OPTIONS ---
                 if (!isLockedOut) ...[
-                  // Option: Sign in with PIN (If not currently showing PIN)
                   if (!_usePin && authViewModel.pinEnabled)
                     TextButton.icon(
                       onPressed: () => setState(() { _usePin = true; _usePassword = false; }),
@@ -146,7 +171,6 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                       label: const Text("Sign in with PIN"),
                     ),
                   
-                  // Option: Sign in with Biometrics (If currently showing PIN but bio enabled)
                   if (_usePin && user.biometricEnabled)
                     TextButton.icon(
                       onPressed: () => setState(() { _usePin = false; _usePassword = false; }),
@@ -154,7 +178,6 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                       label: const Text("Use Biometrics instead"),
                     ),
 
-                  // Option: Sign in with Password instead
                   TextButton.icon(
                     onPressed: () => setState(() { _usePassword = true; _usePin = false; }),
                     icon: const Icon(Icons.password, size: 16),
@@ -162,7 +185,6 @@ class _BiometricLockViewState extends State<BiometricLockView> {
                   ),
                 ],
 
-                // Global Option: Sign Out
                 TextButton(
                   onPressed: () => authViewModel.logout(),
                   child: Text(

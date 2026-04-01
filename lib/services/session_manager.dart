@@ -16,18 +16,18 @@ class SessionManager extends ChangeNotifier {
     _warningTimer?.cancel();
 
     _warningTimer = Timer(Duration(seconds: _timeoutInSeconds - _warningInSeconds), () {
-      print("Inactivity warning reached.");
+      debugPrint("Inactivity warning reached.");
       onWarning();
     });
 
     _timer = Timer(Duration(seconds: _timeoutInSeconds), () {
-      print("Inactivity timeout reached. Logging out.");
+      debugPrint("Inactivity timeout reached. Logging out.");
       onLogout();
     });
   }
 
   void resetTimer() {
-    print("User interaction detected. Resetting session timer.");
+    debugPrint("User interaction detected. Resetting session timer.");
     startTimer();
   }
 

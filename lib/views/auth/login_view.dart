@@ -5,6 +5,8 @@ import '../../services/storage_service.dart';
 import '../widgets/custom_widgets.dart';
 import 'register_view.dart';
 import '../home_view.dart';
+// ✅ ADDED: Import the lock screen so we can route to it on lockout
+import 'biometric_lock_view.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -45,7 +47,6 @@ class _LoginViewState extends State<LoginView> {
       return false;
     }
 
-    // Email regex check
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(email)) {
       authViewModel.setError("Please enter a valid email format.");
@@ -66,6 +67,14 @@ class _LoginViewState extends State<LoginView> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = isDark ? const Color(0xFF0D1321) : const Color(0xFFF0F4FA);
     final Color cardBg = isDark ? const Color(0xFF131C2E) : Colors.white;
+
+    // ✅ KEY FIX: If the user has hit 3 failed biometric attempts, show the
+    // lock screen directly instead of the normal login form. This is the
+    // "where to put the Consumer" answer — right here at the top of build(),
+    // before returning the Scaffold. It intercepts the whole screen.
+    if (authViewModel.biometricLockedOut) {
+      return const BiometricLockView();
+    }
 
     return Scaffold(
       backgroundColor: bg,
@@ -225,7 +234,7 @@ class _LoginViewState extends State<LoginView> {
                           },
                         ),
 
-                        // Biometric button (conditional)
+                        // ✅ Biometric button (unchanged — already correct)
                         if (_canUseBiometrics) ...[
                           const SizedBox(height: 12),
                           SizedBox(
@@ -236,6 +245,11 @@ class _LoginViewState extends State<LoginView> {
                                   : () async {
                                       bool success = await authViewModel
                                           .authenticateWithBiometrics();
+                                      // ✅ On success → go to HomeView.
+                                      // On failure × 3 → biometricLockedOut becomes
+                                      // true, the build() above re-runs and shows
+                                      // BiometricLockView automatically. No extra
+                                      // code needed here.
                                       if (success && mounted) {
                                         Navigator.pushReplacement(
                                           context,
@@ -340,7 +354,6 @@ class _LoginViewState extends State<LoginView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Official Google Icon
                                 Image.asset(
                                   'lib/icons/google-icon-48.png',
                                   width: 22,
@@ -411,7 +424,6 @@ class _LoginViewState extends State<LoginView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Official Facebook Icon
                                 Image.asset(
                                   'lib/icons/facebook_logo.png',
                                   width: 22,
@@ -513,6 +525,30 @@ class _LoginViewState extends State<LoginView> {
                       ],
                     ),
                   ),
+
+                  // ── Error / Success messages ──────────────────────────────
+                  if (authViewModel.error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      authViewModel.error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                  if (authViewModel.success != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      authViewModel.success!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF4CAF50),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -525,6 +561,3 @@ class _LoginViewState extends State<LoginView> {
 );
 }
 }
-
-/// Simulated coloured Google "G" icon using a simple styled Text.
-// Removed custom painter classes as they are replaced by an asset.

@@ -17,12 +17,11 @@ class LocalAuthService {
 
   Future<bool> authenticate() async {
     try {
-      // Using the most basic call possible to avoid browser security rejections on Web
       return await _auth.authenticate(
         localizedReason: 'Verify your identity to unlock SkyFit Pro',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: false, // Allows PIN fallback if fingerprint is being stubborn
+          biometricOnly: false,
         ),
       );
     } catch (e) {
