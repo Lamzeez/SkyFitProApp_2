@@ -28,7 +28,6 @@ class AuthViewModel extends ChangeNotifier {
   Timer? _errorTimer;
   Timer? _successTimer;
 
-  // OTP Verification State
   String? _currentOTP;
   Map<String, dynamic>? _pendingRegistrationData;
   DateTime? _otpSentTime;
@@ -40,7 +39,8 @@ class AuthViewModel extends ChangeNotifier {
   bool get isBiometricAuthenticated => _isBiometricAuthenticated;
   bool get isPinAuthenticated => _isPinAuthenticated;
   bool get biometricLockedOut => _biometricFailCount >= 3;
-  bool get pinEnabled => _user?.securePin != null && _user!.securePin!.isNotEmpty;
+  bool get pinEnabled =>
+      _user?.securePin != null && _user!.securePin!.isNotEmpty;
 
   AuthViewModel() {
     _init();
@@ -49,7 +49,8 @@ class AuthViewModel extends ChangeNotifier {
   void setError(String message, {double seconds = 2.8}) {
     _errorTimer?.cancel();
     _error = message;
-    _errorTimer = Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
+    _errorTimer =
+        Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
       _error = null;
       notifyListeners();
     });
@@ -64,7 +65,8 @@ class AuthViewModel extends ChangeNotifier {
   void setSuccess(String message, {double seconds = 2.8}) {
     _successTimer?.cancel();
     _success = message;
-    _successTimer = Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
+    _successTimer =
+        Timer(Duration(milliseconds: (seconds * 1000).toInt()), () {
       _success = null;
       notifyListeners();
     });
@@ -76,7 +78,8 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> sendOTPForRegistration(String email, Map<String, dynamic> registrationData) async {
+  Future<bool> sendOTPForRegistration(
+      String email, Map<String, dynamic> registrationData) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -193,7 +196,6 @@ class AuthViewModel extends ChangeNotifier {
         _isBiometricAuthenticated = true;
         _isPinAuthenticated = true;
         _biometricFailCount = 0;
-        // Save credentials so biometric re-auth can sign the user back in
         await _storageService.save('bio_email', email);
         await _storageService.save('bio_password', password);
         setSuccess("Welcome back, ${_user!.fullName}!");
@@ -349,35 +351,58 @@ class AuthViewModel extends ChangeNotifier {
     _error = null;
 
     if (enabled) {
-      // Step 1: Check hardware/browser support
+      // ── Step 1: Check whether the browser/device can even do WebAuthn ──────
       bool available = await _localAuthService.isBiometricAvailable();
       if (!available) {
-        // ✅ IMPROVED MESSAGE: tells the user what to check instead of a dead end
-        setError(
-          kIsWeb
-              ? "Your browser does not support biometrics, or no fingerprint/FaceID is enrolled. "
-                "Try Chrome or Safari on a device with biometric hardware."
-              : "Your device does not support biometric authentication. "
-                "Ensure a fingerprint or face is enrolled in your device settings.",
-        );
+        if (kIsWeb) {
+          // The WebAuthn API itself is missing — very old browser
+          setError(
+            "Your browser does not support biometric login. "
+            "Please use Chrome, Edge, or Safari on a modern device.",
+            seconds: 6,
+          );
+        } else {
+          setError(
+            "Biometrics not available. "
+            "Make sure a fingerprint or face is enrolled in your device settings.",
+            seconds: 6,
+          );
+        }
         notifyListeners();
         return false;
       }
 
-      // Step 2: On web, register a WebAuthn credential (creates the browser prompt)
-      //         On mobile, just do the auth challenge (local_auth handles everything)
+      // ── Step 2: Trigger the actual registration prompt ───────────────────
+      // On web  → WebAuthn navigator.credentials.create() — browser shows
+      //           the OS fingerprint/FaceID/Windows Hello dialog.
+      // On mobile → local_auth.authenticate() — returns true immediately.
+      //
+      // If the user's device has NO biometric enrolled at all, the browser
+      // will show its own error inside the native dialog at this point.
+      // We surface that as a clear message rather than a silent failure.
       bool registered = await _localAuthService.registerBiometric(
         _user!.uid,
         _user!.fullName,
       );
       if (!registered) {
-        setError("Biometric setup was cancelled or failed. Please try again.");
+        if (kIsWeb) {
+          setError(
+            "Biometric setup was cancelled or your device has no fingerprint/FaceID enrolled. "
+            "Enroll a fingerprint in your OS settings, then try again.",
+            seconds: 7,
+          );
+        } else {
+          setError(
+            "Biometric setup failed. Please try again.",
+            seconds: 5,
+          );
+        }
         notifyListeners();
         return false;
       }
     }
 
-    // Step 3: Persist the preference
+    // ── Step 3: Persist the preference ──────────────────────────────────────
     try {
       await _firestoreService.updateBiometricStatus(_user!.uid, enabled);
       await _storageService.save('biometric_enabled', enabled.toString());

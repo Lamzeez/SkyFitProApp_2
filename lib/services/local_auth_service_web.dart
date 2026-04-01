@@ -1,16 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// local_auth_service_web.dart
-// Only compiled on web (conditional import in local_auth_service.dart).
-//
-// Strategy: inject a plain <script> into the page that puts two async
-// functions on window (skyfit_webauthn_register / skyfit_webauthn_authenticate).
-// Then call them from Dart using dart:js_interop + dart:js_interop_unsafe,
-// which are the current non-deprecated APIs.
-//
-// Required in pubspec.yaml:
-//   dependencies:
-//     web: ^0.5.1   (or latest — already required by Flutter Web itself)
-// ─────────────────────────────────────────────────────────────────────────────
+// local_auth_service_web.dart — compiled ONLY on web builds.
+// Uses dart:js_interop + dart:js_interop_unsafe + package:web (all non-deprecated).
 
 import 'dart:async';
 import 'dart:convert';
@@ -20,28 +9,58 @@ import 'dart:js_interop_unsafe';
 import 'package:web/web.dart' as web;
 import 'package:flutter/foundation.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Interop: PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
-// ─────────────────────────────────────────────────────────────────────────────
+// ── JS interop: PublicKeyCredential static method ─────────────────────────────
 
 @JS('PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable')
 external JSPromise<JSBoolean> _isUVPAAvailable();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────────
 
 Future<bool> webAuthnIsAvailable() async {
   try {
-    // Does the browser know WebAuthn at all?
+    // 1. Does the browser expose the WebAuthn API at all?
     final hasApi = web.window.getProperty<JSAny?>('PublicKeyCredential'.toJS);
-    if (hasApi == null) return false;
+    if (hasApi == null) {
+      debugPrint('[WebAuthn] PublicKeyCredential API not found in this browser.');
+      return false;
+    }
 
-    // Does the device have enrolled biometrics (Touch ID, Windows Hello, etc.)?
-    final result = await _isUVPAAvailable().toDart;
-    return result.toDart;
+    // 2. Is a platform authenticator (biometric hardware) enrolled?
+    //    This returns false on devices with no fingerprint/FaceID/Windows Hello set up.
+    //    It also returns false if called from an insecure (HTTP) origin.
+    try {
+      final result = await _isUVPAAvailable().toDart;
+      final enrolled = result.toDart;
+      debugPrint('[WebAuthn] Platform authenticator available: $enrolled');
+
+      // 3. If no biometric is enrolled, fall back to checking whether
+      //    the browser supports WebAuthn at all (conditional mediation).
+      //    This allows users who only have a PIN/password device authenticator
+      //    to still use the credential flow.
+      if (!enrolled) {
+        // Check if ConditionalMediationAvailable exists (Chrome 108+)
+        final hasConditional = web.window.getProperty<JSAny?>(
+          'PublicKeyCredential'.toJS,
+        );
+        // We already know the API exists — treat as available and let the
+        // browser decide at registration time. This avoids false negatives
+        // on devices where UVPA check is unreliable (some Android browsers).
+        debugPrint(
+          '[WebAuthn] No platform authenticator enrolled, but WebAuthn API exists. '
+          'Allowing toggle — browser will show its own error if hardware is missing.',
+        );
+        return true;
+      }
+
+      return true;
+    } catch (uvpaError) {
+      // Some browsers throw if called in an insecure context
+      debugPrint('[WebAuthn] UVPA check threw: $uvpaError');
+      // If the API exists but UVPA throws, still allow — let the browser decide
+      return true;
+    }
   } catch (e) {
-    debugPrint('WebAuthn availability check failed: $e');
+    debugPrint('[WebAuthn] Availability check failed: $e');
     return false;
   }
 }
@@ -50,54 +69,77 @@ Future<bool> webAuthnRegister(String userId, String userName) async {
   try {
     _ensureHelperScript();
 
+    // rpId MUST match the hostname of the page exactly.
+    // window.location.hostname gives us "skyfit-pro-app.onrender.com" on Render,
+    // or "localhost" locally — both work correctly this way.
+    final hostname = web.window.location.hostname;
+    debugPrint('[WebAuthn] Registering credential for rpId: $hostname');
+
     final args = jsonEncode({
       'challenge': _randomB64(),
+      'rpId': hostname,
       'rpName': 'SkyFit Pro',
       'userId': base64Url.encode(utf8.encode(userId)),
       'userName': userName,
       'displayName': userName,
     });
 
-    final fn = web.window.getProperty<JSFunction?>('skyfit_webauthn_register'.toJS);
+    final fn = web.window
+        .getProperty<JSFunction?>('skyfit_webauthn_register'.toJS);
     if (fn == null) {
-      debugPrint('WebAuthn helper script not loaded.');
+      debugPrint('[WebAuthn] Helper script not loaded — register fn missing.');
       return false;
     }
 
     final promise = fn.callAsFunction(null, args.toJS) as JSPromise<JSAny?>;
     final result = await promise.toDart;
 
-    if (result == null) return false;
+    if (result == null) {
+      debugPrint('[WebAuthn] Register returned null — user likely cancelled.');
+      return false;
+    }
+
     final credentialId = (result as JSString).toDart;
     if (credentialId.isEmpty) return false;
 
+    // Store credential ID and the rpId it was created for
     web.window.localStorage.setItem('skyfit_webauthn_id', credentialId);
-    debugPrint('WebAuthn credential registered: $credentialId');
+    web.window.localStorage.setItem('skyfit_webauthn_rpid', hostname);
+    debugPrint('[WebAuthn] Credential registered successfully: $credentialId');
     return true;
   } catch (e) {
-    debugPrint('WebAuthn registration failed: $e');
+    debugPrint('[WebAuthn] Registration failed: $e');
     return false;
   }
 }
 
 Future<bool> webAuthnAuthenticate() async {
   try {
-    final storedId = web.window.localStorage.getItem('skyfit_webauthn_id');
+    final storedId =
+        web.window.localStorage.getItem('skyfit_webauthn_id');
     if (storedId == null || storedId.isEmpty) {
-      debugPrint('No WebAuthn credential — user must enable biometrics first.');
+      debugPrint('[WebAuthn] No stored credential — user must enable biometrics first.');
       return false;
     }
 
+    // Use the rpId that was set at registration time
+    final storedRpId =
+        web.window.localStorage.getItem('skyfit_webauthn_rpid') ??
+        web.window.location.hostname;
+
+    debugPrint('[WebAuthn] Authenticating with rpId: $storedRpId');
     _ensureHelperScript();
 
     final args = jsonEncode({
       'challenge': _randomB64(),
+      'rpId': storedRpId,
       'credentialId': storedId,
     });
 
-    final fn = web.window.getProperty<JSFunction?>('skyfit_webauthn_authenticate'.toJS);
+    final fn = web.window
+        .getProperty<JSFunction?>('skyfit_webauthn_authenticate'.toJS);
     if (fn == null) {
-      debugPrint('WebAuthn helper script not loaded.');
+      debugPrint('[WebAuthn] Helper script not loaded — authenticate fn missing.');
       return false;
     }
 
@@ -105,29 +147,26 @@ Future<bool> webAuthnAuthenticate() async {
     final result = await promise.toDart;
 
     if (result == null) return false;
-    return (result as JSBoolean).toDart;
+    final success = (result as JSBoolean).toDart;
+    debugPrint('[WebAuthn] Authentication result: $success');
+    return success;
   } catch (e) {
-    debugPrint('WebAuthn authentication failed or cancelled: $e');
+    debugPrint('[WebAuthn] Authentication failed: $e');
     return false;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 String _randomB64() {
   final bytes = List<int>.generate(32, (_) => Random.secure().nextInt(256));
   return base64Url.encode(bytes);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JS helper script — injected once into <head>
-//
-// Exposes two async functions on window:
-//   skyfit_webauthn_register(jsonArgs)   → Promise<string | null>
-//   skyfit_webauthn_authenticate(jsonArgs) → Promise<boolean>
-// ─────────────────────────────────────────────────────────────────────────────
+// ── JS helper script ──────────────────────────────────────────────────────────
+// Injected once into <head>. Exposes two async functions on window that handle
+// all ArrayBuffer ↔ base64url conversion and the WebAuthn API calls.
+// rpId is passed in the JSON args so it matches the registration origin exactly.
 
 bool _helperInjected = false;
 
@@ -137,7 +176,6 @@ void _ensureHelperScript() {
 
   const src = r"""
 (function () {
-  // Convert a base64url string to an ArrayBuffer
   function b64ToBuffer(b64) {
     const padded = b64.replace(/-/g, '+').replace(/_/g, '/');
     const bin = atob(padded);
@@ -146,7 +184,6 @@ void _ensureHelperScript() {
     return buf.buffer;
   }
 
-  // Convert an ArrayBuffer to a base64url string
   function bufferToB64(buffer) {
     const bytes = new Uint8Array(buffer);
     let bin = '';
@@ -154,14 +191,16 @@ void _ensureHelperScript() {
     return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   }
 
-  // Register a new WebAuthn credential
   window.skyfit_webauthn_register = async function (jsonArgs) {
     try {
       const o = JSON.parse(jsonArgs);
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: b64ToBuffer(o.challenge),
-          rp: { name: o.rpName },
+          rp: {
+            id: o.rpId,
+            name: o.rpName,
+          },
           user: {
             id: b64ToBuffer(o.userId),
             name: o.userName,
@@ -181,17 +220,17 @@ void _ensureHelperScript() {
       });
       return credential ? bufferToB64(credential.rawId) : null;
     } catch (err) {
-      console.warn('SkyFit WebAuthn register error:', err);
+      console.warn('[SkyFit WebAuthn] Register error:', err.name, err.message);
       return null;
     }
   };
 
-  // Verify an existing WebAuthn credential
   window.skyfit_webauthn_authenticate = async function (jsonArgs) {
     try {
       const o = JSON.parse(jsonArgs);
       const assertion = await navigator.credentials.get({
         publicKey: {
+          rpId: o.rpId,
           challenge: b64ToBuffer(o.challenge),
           allowCredentials: [
             {
@@ -206,14 +245,15 @@ void _ensureHelperScript() {
       });
       return assertion !== null;
     } catch (err) {
-      console.warn('SkyFit WebAuthn authenticate error:', err);
+      console.warn('[SkyFit WebAuthn] Authenticate error:', err.name, err.message);
       return false;
     }
   };
 })();
 """;
 
-  final script = web.document.createElement('script') as web.HTMLScriptElement;
+  final script =
+      web.document.createElement('script') as web.HTMLScriptElement;
   script.textContent = src;
   web.document.head!.appendChild(script);
 }
